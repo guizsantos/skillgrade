@@ -1,3 +1,4 @@
+import type { Provenance } from './core/provenance';
 export interface CommandResult {
     stdout: string;
     stderr: string;
@@ -88,6 +89,7 @@ export interface EvalReport {
     pass_pow_k: number;       // probability of all k trials succeeding
     trials: TrialResult[];
     skills_used: string[];
+    provenance?: Provenance;  // what was evaluated; see core/provenance.ts
 }
 
 export abstract class BaseAgent {

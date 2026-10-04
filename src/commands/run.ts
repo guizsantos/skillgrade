@@ -16,6 +16,8 @@ import { createAgent, AgentConfig } from '../agents/registry';
 import { BaseAgent, EvalReport } from '../types';
 import { ResolvedTask } from '../core/config.types';
 import { parseEnvFile } from '../utils/env';
+import { gitProvenance } from '../core/provenance';
+import { importedFiles } from '../core/imports';
 import { fmt, header, kv, progress, resultsSummary, validationResult } from '../utils/cli';
 
 /** Agents that accept a model on the command line. */
@@ -134,6 +136,12 @@ export async function runEvals(dir: string, opts: RunOptions) {
     await fs.ensureDir(resultsDir);
     kv('output', outputDir);
 
+    // Taken before the run: files edited mid-run don't count
+    // Inputs outside the eval dir: $import-ed files (shared defaults) and the files tasks copy in
+    const imported = await importedFiles(path.join(dir, 'eval.yaml'));
+    const workspaceSrcs = tasksToRun.flatMap(t => (t.workspace || []).map(w => path.resolve(dir, w.src)));
+    const runProvenance = gitProvenance(dir, skillsPaths, imported, workspaceSrcs);
+
     // Track CI results
     const reports: EvalReport[] = [];
     let allPassed = true;
@@ -233,7 +241,9 @@ export async function runEvals(dir: string, opts: RunOptions) {
             ? new DockerProvider()
             : new LocalProvider();
 
-        const runner = new EvalRunner(provider, resultsDir);
+        const runner = new EvalRunner(provider, resultsDir, opts.validate ? undefined : {
+            ...runProvenance, agent: agentName, model: modelName ?? null,
+        });
 
         if (opts.validate) {
             // Validation mode

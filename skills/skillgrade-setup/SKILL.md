@@ -45,7 +45,7 @@ description: Sets up and runs skillgrade evaluation pipelines for Agent Skills. 
 
 **Step 5: Review Results**
 1. Run `skillgrade preview` for a CLI report.
-2. Run `skillgrade preview browser` to open the web UI at `http://localhost:3847`.
+2. Run `skillgrade preview browser` to browse every skill's results at `http://localhost:3847`: scores, Δ against the previous skill version (commit the skill change first; runs on uncommitted changes aren't compared), runs and trials.
 3. Reports are saved to `$TMPDIR/skillgrade/<skill-name>/results/`. Override with `--output=DIR`.
 
 **Step 6: Integrate with CI**
