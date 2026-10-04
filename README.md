@@ -60,12 +60,18 @@ Reports are saved to `$TMPDIR/skillgrade/<skill-name>/results/`. Override with `
 - `commit` (HEAD).
 - `skill_commit`: the last commit that touched the skill.
 - `eval_commit`: the last commit that touched the eval dir or a file `eval.yaml` imports.
-- `dirty`: uncommitted changes to those, or to the files tasks copy in.
+- `from_head` and `ignored`, when the run used `--from-head` (see below).
 - `agent`, `model`, `args`, and the eval and skill paths.
 
 Runs are compared only when their `eval_commit` and model match the latest run's. Anything else measures a different test, not a different skill.
 
-Runs made on uncommitted changes are listed but never compared, because no commit describes what they evaluated. Commit your skill change before a run you want counted.
+**A run evaluates a commit.** In a git repo, `skillgrade` won't start if the run's inputs have uncommitted changes. The inputs are the skill, the eval dir, the YAML that `eval.yaml` imports, and the files tasks copy in. The error lists the changed paths. You can commit them, or pass `--from-head` to evaluate HEAD without them.
+
+`--from-head` reads every input from a temporary `git worktree` at HEAD and prints the changes it leaves out. Results still go to this tree's `--output`. The worktree is removed when the run ends, including when it's interrupted or killed. A leftover from a crashed run is pruned at the next start.
+
+`--validate` grades the working tree on purpose, so it's never checked and can't be combined with `--from-head`. Outside a git repo, nothing is checked.
+
+Old reports that recorded `dirty` changes are listed but never compared, because no commit describes what they evaluated.
 
 Reports from before provenance existed still show: each file is a run of its own.
 
@@ -94,6 +100,7 @@ Reports from before provenance existed still show: each file is a run of its own
 | `--opencode-model=MODEL` | OpenCode model (provider/model format) |
 | `--output=DIR` | Output directory (default: `$TMPDIR/skillgrade`) |
 | `--validate` | Verify graders using reference solutions |
+| `--from-head` | Evaluate HEAD from a temporary worktree, leaving uncommitted changes to the inputs out (see [Browsing results](#browsing-results)) |
 | `--ci` | CI mode: exit non-zero if below threshold |
 | `--threshold=0.8` | Pass rate threshold for CI mode |
 | `--preview` | Show CLI results after running |

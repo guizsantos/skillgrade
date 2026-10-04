@@ -5,8 +5,9 @@
  * provenance was recorded is a run of its own. Versions are commits (see
  * core/provenance.ts). summary() compares skill versions on the runs that share
  * the latest run's eval version and model; anything else measures a different
- * test, not a different skill. Runs on uncommitted changes (`dirty`) are listed
- * but never compared: no commit describes what they evaluated.
+ * test, not a different skill. A run evaluates a commit (`skillgrade` refuses
+ * uncommitted inputs); reports from before that may carry `dirty` changes, and
+ * are listed but never compared: no commit describes what they evaluated.
  */
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -130,7 +131,8 @@ export function versions(prov: Record<string, any>): [string, string] {
     ];
 }
 
-const isDirty = (r: Run) => (r.prov.dirty || []).length > 0;
+const isDirty = (r: Run) =>  // legacy reports only
+    (r.prov.dirty || []).length > 0;
 
 /** Every run of a skill, and its skill versions compared on the runs comparable with the latest. */
 export function summary(skill: string, runs: Run[], evalTasks: string[] = []) {

@@ -16,7 +16,7 @@ import { createAgent, AgentConfig } from '../agents/registry';
 import { BaseAgent, EvalReport } from '../types';
 import { ResolvedTask } from '../core/config.types';
 import { parseEnvFile } from '../utils/env';
-import { gitProvenance } from '../core/provenance';
+import { gitProvenance, headWorktree, pruneWorktrees, repoRoot, uncommitted } from '../core/provenance';
 import { importedFiles } from '../core/imports';
 import { fmt, header, kv, progress, resultsSummary, validationResult } from '../utils/cli';
 
@@ -43,6 +43,7 @@ interface RunOptions {
     command?: string;    // command agent command (e.g., "node mycli.js")
     openCodeAgent?: string;   // OpenCode agent (build|plan|explore)
     openCodeModel?: string;   // OpenCode model (provider/model format)
+    fromHead?: boolean;  // with uncommitted inputs: evaluate HEAD from a worktree, leaving them out
 }
 
 async function loadEnvFile(filePath: string): Promise<Record<string, string>> {
@@ -55,9 +56,6 @@ async function loadEnvFile(filePath: string): Promise<Record<string, string>> {
 export async function runEvals(dir: string, opts: RunOptions) {
     console.log(`\n${fmt.bold('skillgrade')}\n`);
 
-    // Load eval.yaml
-    const config = await loadEvalConfig(dir);
-
     // Load environment variables
     const rootEnv = await loadEnvFile(path.join(dir, '.env'));
     const env: Record<string, string> = { ...rootEnv };
@@ -69,44 +67,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
         kv('env', Object.keys(rootEnv).join(', '));
     }
 
-    // Detect skills
-    let skillsPaths: string[] = [];
-    if (config.skill) {
-        let skillDir = path.resolve(dir, config.skill);
-        const stat = await fs.stat(skillDir).catch(() => null);
-        if (stat?.isFile()) {
-            skillDir = path.dirname(skillDir);
-        }
-        if (stat && await fs.pathExists(skillDir)) {
-            skillsPaths = [skillDir];
-            kv('skill', path.relative(dir, skillDir) || '.');
-        } else {
-            console.error(`  ${fmt.red('warning')}  skill path not found: ${config.skill}`);
-        }
-    } else {
-        const skills = await detectSkills(dir);
-        skillsPaths = skills.map(s => s.path);
-        if (skills.length > 0) {
-            kv('skills', skills.map(s => s.name).join(', '));
-        }
-    }
-
-    // Select which of the tasks to run: by name, by name pattern, by metadata
-    let tasksToRun;
-    try {
-        tasksToRun = selectTasks(config.tasks, {
-            names: opts.eval?.split(',').map(s => s.trim()).filter(Boolean),
-            filters: opts.filters,
-            pattern: opts.filterPattern,
-        });
-    } catch (err) {
-        console.error(`  ${fmt.red('error')}  ${err instanceof Error ? err.message : err}`);
-        if (opts.eval) {
-            console.log(`  ${fmt.dim('available:')} ${config.tasks.map(t => t.name).join(', ')}`);
-        }
-        throw err;
-    }
-
+    let { config, skillsPaths, tasksToRun } = await loadSuite(dir, opts, true);
     const narrowed = tasksToRun.length !== config.tasks.length;
     if (narrowed) {
         kv('selected', `${tasksToRun.length} of ${config.tasks.length} tasks`);
@@ -128,7 +89,28 @@ export async function runEvals(dir: string, opts: RunOptions) {
         throw new Error('No tasks match the selection');
     }
 
-    // Output directory
+    // A run evaluates a commit, so uncommitted inputs stop it. --validate grades
+    // the working tree on purpose: it produces no comparable result, and is exempt.
+    if (opts.fromHead && opts.validate) {
+        throw new Error('--from-head is for real runs; --validate grades the working tree');
+    }
+    const root = opts.validate ? null : repoRoot(dir);
+    if (opts.fromHead && !root) {
+        throw new Error('--from-head needs a git repo with a commit to evaluate');
+    }
+    let ignored: string[] = [];
+    if (root) {
+        pruneWorktrees(root);  // a crashed --from-head run's leftover
+        ignored = uncommitted(root, (await runInputs(dir, skillsPaths, tasksToRun)).all);
+        if (ignored.length && !opts.fromHead) {
+            console.error(`  ${fmt.red('error')}  uncommitted changes to this eval's inputs:`);
+            for (const line of ignored) console.error(`    ${line}`);
+            console.error(`\n  A run evaluates a commit. Commit them, or pass --from-head to evaluate HEAD without them.\n`);
+            throw new Error('Uncommitted changes to the eval inputs');
+        }
+    }
+
+    // Output directory: in this tree, even when the inputs come from a worktree
     const outputBase = opts.output || path.join(os.tmpdir(), 'skillgrade');
     const skillName = path.basename(dir);
     const outputDir = path.join(outputBase, skillName);
@@ -136,190 +118,271 @@ export async function runEvals(dir: string, opts: RunOptions) {
     await fs.ensureDir(resultsDir);
     kv('output', outputDir);
 
-    // Taken before the run: files edited mid-run don't count
-    // Inputs outside the eval dir: $import-ed files (shared defaults) and the files tasks copy in
-    const imported = await importedFiles(path.join(dir, 'eval.yaml'));
-    const workspaceSrcs = tasksToRun.flatMap(t => (t.workspace || []).map(w => path.resolve(dir, w.src)));
-    const runProvenance = gitProvenance(dir, skillsPaths, imported, workspaceSrcs);
-
-    // Track CI results
-    const reports: EvalReport[] = [];
-    let allPassed = true;
-
-    // Agents whose CLI takes a model; the rest ignore --model and are told so.
-    const warnedNoModelSupport = new Set<string>();
-
-    // Run each task
-    let taskIndex = 0;
-    for (const taskDef of tasksToRun) {
-        taskIndex++;
-        const resolved = await resolveTask(taskDef, config.defaults, dir);
-        const trials = opts.trials ?? resolved.trials;
-        const parallel = opts.parallel ?? 1;
-
-        // Create a temp task directory for Docker builds
-        const tmpTaskDir = path.join(outputDir, 'tmp', resolved.name);
-        await prepareTempTaskDir(resolved, dir, tmpTaskDir);
-
-        // Build eval options — pass resolved content directly
-        const evalOpts: EvalRunOptions = {
-            instruction: resolved.instruction,
-            graders: opts.grader
-                ? resolved.graders.filter(g => g.type === opts.grader)
-                : resolved.graders,
-            timeoutSec: resolved.timeout,
-            graderModel: resolved.grader_model,
-            graderProvider: resolved.grader_provider,
-            expected: resolved.expected,
-            metadata: resolved.metadata,
-            environment: resolved.environment,
-        };
-
-        // Pick agent: CLI flag > task-level override > auto-detect from API key > default
-        let agentName = opts.agent || resolved.agent;
-        if (!opts.agent && !taskDef.agent) {
-            // No explicit override — auto-detect from available API keys
-            const hasGemini = !!env.GEMINI_API_KEY;
-            const hasAnthropic = !!env.ANTHROPIC_API_KEY;
-            const hasOpenAI = !!env.OPENAI_API_KEY;
-            const keyCount = [hasGemini, hasAnthropic, hasOpenAI].filter(Boolean).length;
-            if (keyCount === 1) {
-                if (hasAnthropic) agentName = 'claude';
-                else if (hasOpenAI) agentName = 'codex';
-                else if (hasGemini) agentName = 'gemini';
+    // --from-head: read every input from a worktree at HEAD, removed however the run ends
+    const head = ignored.length ? headWorktree(root!) : null;
+    const onSignal = (signal: NodeJS.Signals) => {
+        head?.remove();
+        process.exit(signal === 'SIGINT' ? 130 : 143);
+    };
+    if (head) {
+        console.error(`  ${fmt.red('warning')}  --from-head: evaluating HEAD; these uncommitted changes are NOT evaluated:`);
+        for (const line of ignored) console.error(`    ${line}`);
+        process.once('SIGINT', onSignal);
+        process.once('SIGTERM', onSignal);
+    }
+    try {
+        const src = head ? head.at(dir) : dir;
+        if (head) {
+            if (!await fs.pathExists(path.join(src, 'eval.yaml'))) {
+                throw new Error('eval.yaml is not committed at HEAD: nothing to evaluate');
             }
-        }
-        const providerName = opts.provider || resolved.provider;
-        // CLI flag > task-level override > defaults; undefined means the agent CLI decides
-        const requestedModel = opts.model || resolved.model;
-        // Only reported when it is actually used — printing a model the agent
-        // ignores would make a run look like something it was not.
-        const modelName = MODEL_AWARE_AGENTS.has(agentName) ? requestedModel : undefined;
-        if (requestedModel && !modelName && !warnedNoModelSupport.has(agentName)) {
-            warnedNoModelSupport.add(agentName);
-            console.error(`  ${fmt.red('warning')}  --model is ignored by the "${agentName}" agent`);
+            ({ config, skillsPaths, tasksToRun } = await loadSuite(src, opts, false));
         }
 
-        // Build agent config
-        const agentConfig: AgentConfig = {};
-        if (agentName === 'claude') {
-            if (modelName) agentConfig.claude = { model: modelName };
-        } else if (agentName === 'gemini') {
-            if (modelName) agentConfig.gemini = { model: modelName };
-        } else if (agentName === 'codex') {
-            if (modelName) agentConfig.codex = { model: modelName };
-        } else if (agentName === 'acp') {
-            const acpCommand = opts.acpCommand || resolved.acp?.command;
-            if (!acpCommand) {
-                throw new Error('ACP agent requires a command. Specify via --acp-command or acp.command in eval.yaml');
-            }
-            agentConfig.acp = {
-                command: acpCommand,
-                env: resolved.acp?.env,
-                apiKey: env.GEMINI_API_KEY || env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY,
+        // Taken before the run: files edited mid-run don't count
+        let runProvenance = gitProvenance(src, skillsPaths, (await runInputs(src, skillsPaths, tasksToRun)).imported);
+        if (head) {
+            runProvenance = {
+                ...runProvenance, eval_dir: head.back(runProvenance.eval_dir),
+                skill_dirs: runProvenance.skill_dirs.map(head.back), from_head: true, ignored,
             };
-        } else if (agentName === 'opencode') {
-            agentConfig.opencode = {};
-            if (opts.openCodeAgent) {
-                agentConfig.opencode.agent = opts.openCodeAgent;
-            }
-            // --opencode-model predates --model and stays the more specific one
-            const openCodeModel = opts.openCodeModel || modelName;
-            if (openCodeModel) {
-                agentConfig.opencode.model = openCodeModel;
-            }
-        } else if (agentName === 'command') {
-            const command = opts.command || resolved.command;
-            if (!command) {
-                throw new Error('Command agent requires a command. Specify via --command or command in eval.yaml');
-            }
-            agentConfig.command = { command };
         }
 
-        // Pick provider
-        const provider = providerName === 'docker'
-            ? new DockerProvider()
-            : new LocalProvider();
+        // Track CI results
+        const reports: EvalReport[] = [];
+        let allPassed = true;
 
-        const runner = new EvalRunner(provider, resultsDir, opts.validate ? undefined : {
-            ...runProvenance, agent: agentName, model: modelName ?? null,
-        });
+        // Agents whose CLI takes a model; the rest ignore --model and are told so.
+        const warnedNoModelSupport = new Set<string>();
 
-        if (opts.validate) {
-            // Validation mode
-            if (!resolved.solution) {
-                console.error(`  ${fmt.red('error')}  task "${resolved.name}" has no solution defined`);
-                continue;
+        // Run each task
+        let taskIndex = 0;
+        for (const taskDef of tasksToRun) {
+            taskIndex++;
+            const resolved = await resolveTask(taskDef, config.defaults, src);
+            const trials = opts.trials ?? resolved.trials;
+            const parallel = opts.parallel ?? 1;
+
+            // Create a temp task directory for Docker builds
+            const tmpTaskDir = path.join(outputDir, 'tmp', resolved.name);
+            await prepareTempTaskDir(resolved, src, tmpTaskDir);
+
+            // Build eval options — pass resolved content directly
+            const evalOpts: EvalRunOptions = {
+                instruction: resolved.instruction,
+                graders: opts.grader
+                    ? resolved.graders.filter(g => g.type === opts.grader)
+                    : resolved.graders,
+                timeoutSec: resolved.timeout,
+                graderModel: resolved.grader_model,
+                graderProvider: resolved.grader_provider,
+                expected: resolved.expected,
+                metadata: resolved.metadata,
+                environment: resolved.environment,
+            };
+
+            // Pick agent: CLI flag > task-level override > auto-detect from API key > default
+            let agentName = opts.agent || resolved.agent;
+            if (!opts.agent && !taskDef.agent) {
+                // No explicit override — auto-detect from available API keys
+                const hasGemini = !!env.GEMINI_API_KEY;
+                const hasAnthropic = !!env.ANTHROPIC_API_KEY;
+                const hasOpenAI = !!env.OPENAI_API_KEY;
+                const keyCount = [hasGemini, hasAnthropic, hasOpenAI].filter(Boolean).length;
+                if (keyCount === 1) {
+                    if (hasAnthropic) agentName = 'claude';
+                    else if (hasOpenAI) agentName = 'codex';
+                    else if (hasGemini) agentName = 'gemini';
+                }
+            }
+            const providerName = opts.provider || resolved.provider;
+            // CLI flag > task-level override > defaults; undefined means the agent CLI decides
+            const requestedModel = opts.model || resolved.model;
+            // Only reported when it is actually used — printing a model the agent
+            // ignores would make a run look like something it was not.
+            const modelName = MODEL_AWARE_AGENTS.has(agentName) ? requestedModel : undefined;
+            if (requestedModel && !modelName && !warnedNoModelSupport.has(agentName)) {
+                warnedNoModelSupport.add(agentName);
+                console.error(`  ${fmt.red('warning')}  --model is ignored by the "${agentName}" agent`);
             }
 
-            header(`validate: ${resolved.name}`);
-
-            const solveAgent = {
-                async run(_instruction: string, _workspace: string, runCommand: any) {
-                    const result = await runCommand(`bash ${path.basename(resolved.solution!)}`);
-                    return result.stdout;
+            // Build agent config
+            const agentConfig: AgentConfig = {};
+            if (agentName === 'claude') {
+                if (modelName) agentConfig.claude = { model: modelName };
+            } else if (agentName === 'gemini') {
+                if (modelName) agentConfig.gemini = { model: modelName };
+            } else if (agentName === 'codex') {
+                if (modelName) agentConfig.codex = { model: modelName };
+            } else if (agentName === 'acp') {
+                const acpCommand = opts.acpCommand || resolved.acp?.command;
+                if (!acpCommand) {
+                    throw new Error('ACP agent requires a command. Specify via --acp-command or acp.command in eval.yaml');
                 }
-            } as BaseAgent;
+                agentConfig.acp = {
+                    command: acpCommand,
+                    env: resolved.acp?.env,
+                    apiKey: env.GEMINI_API_KEY || env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY,
+                };
+            } else if (agentName === 'opencode') {
+                agentConfig.opencode = {};
+                if (opts.openCodeAgent) {
+                    agentConfig.opencode.agent = opts.openCodeAgent;
+                }
+                // --opencode-model predates --model and stays the more specific one
+                const openCodeModel = opts.openCodeModel || modelName;
+                if (openCodeModel) {
+                    agentConfig.opencode.model = openCodeModel;
+                }
+            } else if (agentName === 'command') {
+                const command = opts.command || resolved.command;
+                if (!command) {
+                    throw new Error('Command agent requires a command. Specify via --command or command in eval.yaml');
+                }
+                agentConfig.command = { command };
+            }
 
-            const report = await runner.runEval(solveAgent, tmpTaskDir, skillsPaths, evalOpts, 1, env);
-            const passed = report.trials[0].reward >= 0.5;
+            // Pick provider
+            const provider = providerName === 'docker'
+                ? new DockerProvider()
+                : new LocalProvider();
 
-            validationResult(passed, report.trials[0].reward, report.trials[0].grader_results.map(gr => ({
-                type: gr.grader_type,
-                score: gr.score,
-                details: gr.details
-            })));
+            const runner = new EvalRunner(provider, resultsDir, opts.validate ? undefined : {
+                ...runProvenance, agent: agentName, model: modelName ?? null,
+            });
 
-            if (!passed) allPassed = false;
-        } else {
-            // Normal eval mode
-            const agent = createAgent(agentName, agentConfig);
+            if (opts.validate) {
+                // Validation mode
+                if (!resolved.solution) {
+                    console.error(`  ${fmt.red('error')}  task "${resolved.name}" has no solution defined`);
+                    continue;
+                }
 
-            header(`${resolved.name}  ${fmt.dim(`(${taskIndex}/${tasksToRun.length})`)}`);
-            console.log(`    ${fmt.dim('agent')} ${agentName}${modelName ? `  ${fmt.dim('model')} ${modelName}` : ''}  ${fmt.dim('provider')} ${providerName}  ${fmt.dim('trials')} ${trials}${parallel > 1 ? `  ${fmt.dim('parallel')} ${parallel}` : ''}`);
-            console.log();
+                header(`validate: ${resolved.name}`);
 
-            try {
-                const report = await runner.runEval(agent, tmpTaskDir, skillsPaths, evalOpts, trials, env, parallel);
-                reports.push(report);
-
-                // LLM grader reasoning (condensed)
-                for (const trial of report.trials) {
-                    for (const g of trial.grader_results.filter(g => g.grader_type === 'llm_rubric')) {
-                        console.log(`    ${fmt.dim(`trial ${trial.trial_id} llm_rubric:`)} ${g.details.substring(0, 120)}`);
+                const solveAgent = {
+                    async run(_instruction: string, _workspace: string, runCommand: any) {
+                        const result = await runCommand(`bash ${path.basename(resolved.solution!)}`);
+                        return result.stdout;
                     }
-                }
+                } as BaseAgent;
 
-                resultsSummary(report.pass_rate, report.pass_at_k, report.pass_pow_k, trials, opts.preset);
+                const report = await runner.runEval(solveAgent, tmpTaskDir, skillsPaths, evalOpts, 1, env);
+                const passed = report.trials[0].reward >= 0.5;
 
-                if (report.pass_rate < (opts.threshold ?? config.defaults.threshold)) {
+                validationResult(passed, report.trials[0].reward, report.trials[0].grader_results.map(gr => ({
+                    type: gr.grader_type,
+                    score: gr.score,
+                    details: gr.details
+                })));
+
+                if (!passed) allPassed = false;
+            } else {
+                // Normal eval mode
+                const agent = createAgent(agentName, agentConfig);
+
+                header(`${resolved.name}  ${fmt.dim(`(${taskIndex}/${tasksToRun.length})`)}`);
+                console.log(`    ${fmt.dim('agent')} ${agentName}${modelName ? `  ${fmt.dim('model')} ${modelName}` : ''}  ${fmt.dim('provider')} ${providerName}  ${fmt.dim('trials')} ${trials}${parallel > 1 ? `  ${fmt.dim('parallel')} ${parallel}` : ''}`);
+                console.log();
+
+                try {
+                    const report = await runner.runEval(agent, tmpTaskDir, skillsPaths, evalOpts, trials, env, parallel);
+                    reports.push(report);
+
+                    // LLM grader reasoning (condensed)
+                    for (const trial of report.trials) {
+                        for (const g of trial.grader_results.filter(g => g.grader_type === 'llm_rubric')) {
+                            console.log(`    ${fmt.dim(`trial ${trial.trial_id} llm_rubric:`)} ${g.details.substring(0, 120)}`);
+                        }
+                    }
+
+                    resultsSummary(report.pass_rate, report.pass_at_k, report.pass_pow_k, trials, opts.preset);
+
+                    if (report.pass_rate < (opts.threshold ?? config.defaults.threshold)) {
+                        allPassed = false;
+                    }
+                } catch (err) {
+                    console.error(`\n  ${fmt.fail('error')}  evaluation failed: ${err}\n`);
                     allPassed = false;
                 }
-            } catch (err) {
-                console.error(`\n  ${fmt.fail('error')}  evaluation failed: ${err}\n`);
-                allPassed = false;
             }
+
+            // How far through the selected tasks we are. Pointless for a single
+            // task, and the run is otherwise silent about it until the very end.
+            if (tasksToRun.length > 1) {
+                progress(taskIndex, tasksToRun.length);
+            }
+
+            // Cleanup temp dir
+            try { await fs.remove(tmpTaskDir); } catch { /* ignore cleanup errors */ }
         }
 
-        // How far through the selected tasks we are. Pointless for a single
-        // task, and the run is otherwise silent about it until the very end.
-        if (tasksToRun.length > 1) {
-            progress(taskIndex, tasksToRun.length);
+        // CI mode: exit with appropriate code
+        if (opts.ci) {
+            const threshold = opts.threshold ?? config.defaults.threshold;
+            if (!allPassed) {
+                console.error(`\n  ${fmt.fail('CI FAILED')}  below threshold ${(threshold * 100).toFixed(0)}%\n`);
+                throw new Error('CI check failed');
+            }
+            console.log(`\n  ${fmt.pass('CI PASSED')}  above threshold ${(threshold * 100).toFixed(0)}%\n`);
         }
+    } finally {
+        process.off('SIGINT', onSignal);
+        process.off('SIGTERM', onSignal);
+        head?.remove();
+    }
+}
 
-        // Cleanup temp dir
-        try { await fs.remove(tmpTaskDir); } catch { /* ignore cleanup errors */ }
+/** The eval config, its skills and the selected tasks, read from `dir`. */
+async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
+    const config = await loadEvalConfig(dir);
+
+    // Detect skills
+    let skillsPaths: string[] = [];
+    if (config.skill) {
+        let skillDir = path.resolve(dir, config.skill);
+        const stat = await fs.stat(skillDir).catch(() => null);
+        if (stat?.isFile()) {
+            skillDir = path.dirname(skillDir);
+        }
+        if (stat && await fs.pathExists(skillDir)) {
+            skillsPaths = [skillDir];
+            if (log) kv('skill', path.relative(dir, skillDir) || '.');
+        } else {
+            if (log) console.error(`  ${fmt.red('warning')}  skill path not found: ${config.skill}`);
+        }
+    } else {
+        const skills = await detectSkills(dir);
+        skillsPaths = skills.map(s => s.path);
+        if (skills.length > 0) {
+            if (log) kv('skills', skills.map(s => s.name).join(', '));
+        }
     }
 
-    // CI mode: exit with appropriate code
-    if (opts.ci) {
-        const threshold = opts.threshold ?? config.defaults.threshold;
-        if (!allPassed) {
-            console.error(`\n  ${fmt.fail('CI FAILED')}  below threshold ${(threshold * 100).toFixed(0)}%\n`);
-            throw new Error('CI check failed');
+    // Select which of the tasks to run: by name, by name pattern, by metadata
+    let tasksToRun;
+    try {
+        tasksToRun = selectTasks(config.tasks, {
+            names: opts.eval?.split(',').map(s => s.trim()).filter(Boolean),
+            filters: opts.filters,
+            pattern: opts.filterPattern,
+        });
+    } catch (err) {
+        if (!log) throw err;
+        console.error(`  ${fmt.red('error')}  ${err instanceof Error ? err.message : err}`);
+        if (opts.eval) {
+            console.log(`  ${fmt.dim('available:')} ${config.tasks.map(t => t.name).join(', ')}`);
         }
-        console.log(`\n  ${fmt.pass('CI PASSED')}  above threshold ${(threshold * 100).toFixed(0)}%\n`);
+        throw err;
     }
+    return { config, skillsPaths, tasksToRun };
+}
+
+/** Every file a run reads that git tracks: the eval dir, its imports, the skills, the files tasks copy in. */
+async function runInputs(dir: string, skillsPaths: string[], tasks: { workspace?: { src: string }[] }[]) {
+    const imported = await importedFiles(path.join(dir, 'eval.yaml'));
+    const workspaceSrcs = tasks.flatMap(t => (t.workspace || []).map(w => path.resolve(dir, w.src)));
+    return { imported, all: [dir, ...imported, ...skillsPaths, ...workspaceSrcs] };
 }
 
 /**

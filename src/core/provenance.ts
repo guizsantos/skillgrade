@@ -4,10 +4,13 @@
  *
  * Versions are git commits: the skill's is the last commit that touched its
  * folder, the eval's the last commit that touched the eval dir outside it.
- * Uncommitted changes to either are listed in `dirty`; such a run measured a
- * state no commit describes, so the browser preview never compares it.
+ * A run evaluates a commit: `skillgrade` refuses uncommitted inputs, and with
+ * --from-head reads them from a worktree at HEAD (see headWorktree), listing
+ * the changes it left out in `ignored`.
  */
 import { execFileSync } from 'child_process';
+import * as fs from 'fs-extra';
+import * as os from 'os';
 import * as path from 'path';
 
 export interface Provenance {
@@ -15,7 +18,9 @@ export interface Provenance {
     commit: string | null;       // HEAD
     skill_commit: string | null;
     eval_commit: string | null;
-    dirty: string[];             // `git status --porcelain` lines over the run's inputs
+    dirty?: string[];            // legacy: reports from before uncommitted runs were refused
+    from_head?: boolean;         // read from a worktree at HEAD, leaving `ignored` out
+    ignored?: string[];          // `git status --porcelain` lines not evaluated
     agent?: string;
     model?: string | null;
     args: string[];
@@ -25,7 +30,7 @@ export interface Provenance {
 
 function git(cwd: string, ...args: string[]): string | null {
     try {
-        return execFileSync('git', args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        return execFileSync('git', args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trimEnd();
     } catch {
         return null;  // not a repo, or git missing
     }
@@ -33,17 +38,13 @@ function git(cwd: string, ...args: string[]): string | null {
 
 /**
  * Run-level provenance; `agent` and `model` are added per task. `evalFiles` are
- * eval inputs outside the eval dir (imported YAML); `inputs`, the other files
- * the tasks read (workspace sources), which make a run dirty but aren't the eval.
+ * eval inputs outside the eval dir (imported YAML).
  */
-export function gitProvenance(
-    evalDir: string, skillDirs: string[], evalFiles: string[] = [], inputs: string[] = [], now = new Date(),
-): Provenance {
+export function gitProvenance(evalDir: string, skillDirs: string[], evalFiles: string[] = [], now = new Date()): Provenance {
     const dir = path.resolve(evalDir);
     const exclude = skillDirs.map(s => `:(exclude)${path.resolve(s)}`);
     const last = (...paths: string[]) => git(dir, 'log', '-1', '--format=%H', '--', ...paths) || null;
     const commit = git(dir, 'rev-parse', 'HEAD');
-    const dirty = git(dir, 'status', '--porcelain', '--', dir, ...evalFiles, ...skillDirs, ...inputs);
     const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
     return {
         run_id: `${stamp}-${commit ? commit.slice(0, 7) : 'nogit'}`,
@@ -52,9 +53,49 @@ export function gitProvenance(
         // the eval is its dir plus the files eval.yaml imports; the skill can sit inside the
         // eval dir (SKILL.md beside eval.yaml), and is not part of the eval
         eval_commit: commit ? last(dir, ...evalFiles, ...exclude) : null,
-        dirty: dirty ? dirty.split('\n') : [],
         args: process.argv.slice(2),
         eval_dir: dir,
         skill_dirs: skillDirs.map(s => path.resolve(s)),
     };
+}
+
+/** The repo's top level, or null outside a git repo (or one without a commit yet). */
+export function repoRoot(dir: string): string | null {
+    return git(dir, 'rev-parse', 'HEAD') ? git(dir, 'rev-parse', '--show-toplevel') : null;
+}
+
+/** `git status --porcelain` lines for the inputs inside `root`; others can't be committed here. */
+export function uncommitted(root: string, inputs: string[]): string[] {
+    const real = (p: string) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+    const inside = inputs.map(real).filter(p => !path.relative(root, p).startsWith('..'));
+    if (!inside.length) return [];
+    return (git(root, 'status', '--porcelain', '--', ...inside) || '').split('\n').filter(Boolean);
+}
+
+/**
+ * A detached worktree of HEAD in a temp dir, to read committed inputs from.
+ * `at` maps a path in `root` into it, `back` maps one back; `remove` is sync and
+ * idempotent so a signal handler can call it. A crashed run's leftover is
+ * cleared by `git worktree prune` (see pruneWorktrees).
+ */
+export function headWorktree(root: string) {
+    const wt = fs.mkdtempSync(path.join(os.tmpdir(), 'skillgrade-head-'));
+    execFileSync('git', ['worktree', 'add', '--quiet', '--detach', wt, 'HEAD'], { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] });
+    let removed = false;
+    return {
+        path: wt,
+        at: (p: string) => path.join(wt, path.relative(root, fs.realpathSync(p))),
+        back: (p: string) => path.join(root, path.relative(wt, p)),
+        remove() {
+            if (removed) return;
+            removed = true;
+            git(root, 'worktree', 'remove', '--force', wt);
+            fs.removeSync(wt);
+            git(root, 'worktree', 'prune');
+        },
+    };
+}
+
+export function pruneWorktrees(root: string) {
+    git(root, 'worktree', 'prune');
 }

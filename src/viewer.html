@@ -461,7 +461,7 @@ function skillPage(s) {
     <div class="tbl"><table style="min-width:900px"><thead><tr><th>Run</th><th>Commit</th><th>Skill version</th><th class="num">Tasks</th><th class="num">Trials</th><th class="num">Errored</th><th>Score</th><th class="num">pass@k</th><th class="num">pass^k</th><th>Status</th></tr></thead><tbody>
     ${Su.runs.slice().reverse().map((r, i) => { const t = r.tasks.length === 1 ? r.tasks[0] : {}; const p = r.prov;
       return `<tr><td><a class="mono sm" href="#/s/${enc(s.name)}/r/${enc(r.id)}">${esc(when(r.id))}</a></td>
-      <td class="mono muted">${short(p.commit)}${(p.dirty || []).length ? ` <span class="diff">+dirty</span>` : ""}</td>
+      <td class="mono muted">${short(p.commit)}${(p.dirty || []).length ? ` <span class="diff">+dirty</span>` : ""}${p.from_head ? ` <span class="faint" title="uncommitted changes left out">from HEAD</span>` : ""}</td>
       <td class="mono muted">${short(r.skill_version)}</td><td class="num">${r.tasks.length}</td><td class="num">${r.trials}</td><td class="num ${r.errored ? "err" : "faint"}">${r.errored || "—"}</td>
       <td>${bar(r.score, i === 0 && r.comparable ? "hi" : "")}</td><td class="num mono sm">${f2(t.pass_at_k)}</td><td class="num mono sm">${f2(t.pass_pow_k)}</td>
       <td>${r.comparable ? `<span class="pill on" style="font-size:12px">Compared${i === 0 ? " · latest" : ""}</span>` : `<span class="pill dim" style="font-size:12px" title="different eval version or model than the latest run, or run on uncommitted changes">Not compared</span>`}</td></tr>`; }).join("")}</tbody></table></div></section>`;
@@ -505,7 +505,8 @@ function runPage(s, runId) {
       <dt>Skill version</dt><dd class="mono ${diff(prev && prev.skill_version, r.skill_version)}">${esc(r.skill_version)}${p.skill_commit ? "" : ` <span class="faint">(no git commit recorded)</span>`}</dd>
       <dt>Eval version</dt><dd class="mono ${diff(prev && prev.eval_version, r.eval_version)}">${esc(p.eval_commit || "—")}</dd>
       <dt>Agent</dt><dd class="mono">${esc(p.agent || "—")}</dd><dt>Model</dt><dd class="mono">${esc(p.model || "agent default")}</dd>${p.eval_dir ? `<dt>Eval dir</dt><dd class="mono">${esc(p.eval_dir)}</dd>` : ""}<dt>Args</dt><dd class="mono">${esc((p.args || []).join(" ") || "—")}</dd>
-      ${p.dirty ? `<dt>Uncommitted</dt><dd class="mono">${p.dirty.length ? p.dirty.map(esc).join("<br>") : `<span class="muted">None</span>`}</dd>` : ""}</dl></div>`;
+      ${(p.dirty || []).length ? `<dt>Uncommitted</dt><dd class="mono">${p.dirty.map(esc).join("<br>")}</dd>` : ""}
+      ${p.from_head ? `<dt>Left out (--from-head)</dt><dd class="mono">${(p.ignored || []).map(esc).join("<br>")}</dd>` : ""}</dl></div>`;
   return h + `</div>`;
 }
 
