@@ -1,791 +1,628 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SkillGrade</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
-  <style>
-    /* ─── Reset & Base ──────────────────────────────────────── */
-    *,
-    *::before,
-    *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    :root {
-      --font: 'Inter', -apple-system, system-ui, sans-serif;
-      --mono: 'JetBrains Mono', 'Menlo', monospace;
-      --radius: 10px;
-      --radius-sm: 6px;
-      --transition: 0.2s ease;
-
-      /* Light theme (default) */
-      --bg: #f8f9fc;
-      --bg-card: #ffffff;
-      --bg-code: #f1f3f8;
-      --bg-hover: #f0f2f7;
-      --border: #e2e5ed;
-      --text: #1a1d27;
-      --text-secondary: #5c6370;
-      --text-muted: #9099a8;
-      --accent: #1a1d27;
-      --accent-hover: #333;
-      --green: #22c55e;
-      --green-bg: #ecfdf5;
-      --green-border: #bbf7d0;
-      --red: #ef4444;
-      --red-bg: #fef2f2;
-      --red-border: #fecaca;
-      --yellow: #f59e0b;
-      --yellow-bg: #fffbeb;
-      --purple: #6b7280;
-      --purple-bg: #f3f4f6;
-      --blue: #6b7280;
-      --blue-bg: #f3f4f6;
-      --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-      --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.08);
-    }
-
-    [data-theme="dark"] {
-      --bg: #0c0d12;
-      --bg-card: #14161e;
-      --bg-code: #1a1d28;
-      --bg-hover: #1c1f2b;
-      --border: #262a38;
-      --text: #e4e7ef;
-      --text-secondary: #8b92a5;
-      --text-muted: #565d72;
-      --accent: #e4e7ef;
-      --accent-hover: #ccc;
-      --green: #34d87a;
-      --green-bg: #0c2618;
-      --green-border: #1a4a30;
-      --red: #f87171;
-      --red-bg: #2a1216;
-      --red-border: #4a2228;
-      --yellow: #fbbf24;
-      --yellow-bg: #261f0c;
-      --purple: #9ca3af;
-      --purple-bg: #1f2937;
-      --blue: #9ca3af;
-      --blue-bg: #1f2937;
-      --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-      --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4);
-    }
-
-    html {
-      font-size: 15px;
-    }
-
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      transition: background var(--transition), color var(--transition);
-      min-height: 100vh;
-    }
-
-    /* ─── Layout ────────────────────────────────────────────── */
-    .shell {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem;
-    }
-
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 2rem;
-      padding-bottom: 1.25rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .topbar h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .topbar h1 span {
-      color: var(--accent);
-    }
-
-    .theme-btn {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 0.4rem 0.85rem;
-      font-size: 0.85rem;
-      cursor: pointer;
-      color: var(--text-secondary);
-      transition: all var(--transition);
-    }
-
-    .theme-btn:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    /* ─── Reports List ──────────────────────────────────────── */
-    .reports-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .report-row {
-      display: grid;
-      grid-template-columns: 1fr auto auto auto auto auto;
-      gap: 1.25rem;
-      align-items: center;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1rem 1.25rem;
-      cursor: pointer;
-      transition: all var(--transition);
-      text-decoration: none;
-      color: inherit;
-    }
-
-    .report-row:hover {
-      border-color: var(--accent);
-      box-shadow: var(--shadow-lg);
-      transform: translateY(-1px);
-    }
-
-    .report-task {
-      font-weight: 600;
-      font-size: 0.95rem;
-    }
-
-    .report-file {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .report-metric {
-      text-align: center;
-    }
-
-    .report-metric .val {
-      font-weight: 700;
-      font-size: 1.1rem;
-    }
-
-    .report-metric .lbl {
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-muted);
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 0.15rem 0.55rem;
-      border-radius: 999px;
-      font-size: 0.72rem;
-      font-weight: 600;
-    }
-
-    .badge-pass {
-      background: var(--green-bg);
-      color: var(--green);
-      border: 1px solid var(--green-border);
-    }
-
-    .badge-fail {
-      background: var(--red-bg);
-      color: var(--red);
-      border: 1px solid var(--red-border);
-    }
-
-    .badge-type {
-      background: var(--purple-bg);
-      color: var(--purple);
-    }
-
-    .badge-blue {
-      background: var(--blue-bg);
-      color: var(--blue);
-    }
-
-    /* ─── Detail View ───────────────────────────────────────── */
-    .back-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      color: var(--accent);
-      text-decoration: none;
-      font-size: 0.9rem;
-      font-weight: 500;
-      margin-bottom: 1.25rem;
-    }
-
-    .back-link:hover {
-      text-decoration: underline;
-    }
-
-    .detail-header {
-      margin-bottom: 1.5rem;
-    }
-
-    .detail-header h2 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .detail-stats {
-      display: flex;
-      gap: 1.5rem;
-      margin-top: 0.75rem;
-      flex-wrap: wrap;
-    }
-
-    .stat-pill {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 0.6rem 1rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .stat-pill .val {
-      font-weight: 700;
-      font-size: 1.2rem;
-    }
-
-    .stat-pill .lbl {
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    /* ─── Trial Card ────────────────────────────────────────── */
-    .trial-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      margin-bottom: 0.75rem;
-      overflow: hidden;
-    }
-
-    .trial-header {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.85rem 1.25rem;
-      cursor: pointer;
-      transition: background var(--transition);
-    }
-
-    .trial-header:hover {
-      background: var(--bg-hover);
-    }
-
-    .trial-number {
-      font-weight: 700;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      min-width: 4rem;
-    }
-
-    .trial-reward {
-      font-weight: 700;
-      font-size: 1rem;
-    }
-
-    .trial-reward.pass {
-      color: var(--green);
-    }
-
-    .trial-reward.fail {
-      color: var(--red);
-    }
-
-    .trial-meta {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-      margin-left: auto;
-      display: flex;
-      gap: 1rem;
-    }
-
-    .trial-chevron {
-      color: var(--text-muted);
-      transition: transform var(--transition);
-      font-size: 0.8rem;
-    }
-
-    .trial-card.open .trial-chevron {
-      transform: rotate(90deg);
-    }
-
-    .trial-body {
-      display: none;
-      border-top: 1px solid var(--border);
-    }
-
-    .trial-card.open .trial-body {
-      display: block;
-    }
-
-    /* ─── Grader Results ────────────────────────────────────── */
-    .graders-section {
-      padding: 1rem 1.25rem;
-      background: var(--bg-hover);
-    }
-
-    .grader-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      padding: 0.6rem 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .grader-row:last-child {
-      border-bottom: none;
-    }
-
-    .grader-score {
-      font-weight: 700;
-      font-family: var(--mono);
-      min-width: 3rem;
-    }
-
-    .grader-score.pass {
-      color: var(--green);
-    }
-
-    .grader-score.fail {
-      color: var(--red);
-    }
-
-    .grader-weight {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      font-family: var(--mono);
-    }
-
-    .grader-details {
-      flex: 1;
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-      line-height: 1.5;
-    }
-
-    /* ─── Session Log ───────────────────────────────────────── */
-    .log-section {
-      padding: 0 1.25rem 1.25rem;
-    }
-
-    .log-toggle {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.75rem 0;
-      cursor: pointer;
-      border: none;
-      background: none;
-      color: var(--accent);
-      font-size: 0.85rem;
-      font-weight: 500;
-      font-family: var(--font);
-      width: 100%;
-    }
-
-    .log-toggle:hover {
-      text-decoration: underline;
-    }
-
-    .log-entries {
-      display: none;
-    }
-
-    .log-entries.open {
-      display: block;
-    }
-
-    .log-entry {
-      border-left: 3px solid var(--border);
-      padding: 0.5rem 0.75rem;
-      margin-bottom: 2px;
-      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-      transition: background var(--transition);
-    }
-
-    .log-entry:hover {
-      background: var(--bg-hover);
-    }
-
-    .log-entry.agent_start {
-      border-left-color: var(--purple);
-    }
-
-    .log-entry.command {
-      border-left-color: var(--blue);
-    }
-
-    .log-entry.agent_result {
-      border-left-color: var(--green);
-    }
-
-    .log-entry.grader {
-      border-left-color: var(--yellow);
-    }
-
-    .log-entry.reward {
-      border-left-color: var(--red);
-    }
-
-    .log-label {
-      display: inline-block;
-      font-size: 0.65rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      padding: 0.1rem 0.4rem;
-      border-radius: 3px;
-      margin-right: 0.5rem;
-      font-family: var(--mono);
-    }
-
-    .agent_start .log-label {
-      background: var(--purple-bg);
-      color: var(--purple);
-    }
-
-    .command .log-label {
-      background: var(--blue-bg);
-      color: var(--blue);
-    }
-
-    .agent_result .log-label {
-      background: var(--green-bg);
-      color: var(--green);
-    }
-
-    .grader .log-label {
-      background: var(--yellow-bg);
-      color: var(--yellow);
-    }
-
-    .reward .log-label {
-      background: var(--red-bg);
-      color: var(--red);
-    }
-
-    .log-ts {
-      font-size: 0.65rem;
-      color: var(--text-muted);
-      font-family: var(--mono);
-    }
-
-    .log-content {
-      margin-top: 0.35rem;
-    }
-
-    pre.code-block {
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      background: var(--bg-code);
-      padding: 0.6rem 0.75rem;
-      border-radius: var(--radius-sm);
-      overflow-x: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
-      line-height: 1.5;
-      max-height: 350px;
-      overflow-y: auto;
-      border: 1px solid var(--border);
-    }
-
-    .cmd-line {
-      font-family: var(--mono);
-      color: var(--green);
-      font-weight: 500;
-      font-size: 0.85rem;
-    }
-
-    .cmd-line::before {
-      content: '$ ';
-      color: var(--text-muted);
-    }
-
-    .exit-badge {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      margin-top: 0.25rem;
-    }
-
-    .exit-badge.ok {
-      color: var(--green);
-    }
-
-    .exit-badge.err {
-      color: var(--red);
-    }
-
-    .stderr-text {
-      color: var(--red);
-    }
-
-    .reward-val {
-      font-size: 1.4rem;
-      font-weight: 700;
-    }
-
-    .reward-val.pass {
-      color: var(--green);
-    }
-
-    .reward-val.fail {
-      color: var(--red);
-    }
-
-    /* ─── Empty State ───────────────────────────────────────── */
-    .empty {
-      text-align: center;
-      padding: 4rem 2rem;
-      color: var(--text-muted);
-    }
-
-    .empty-icon {
-      font-size: 3rem;
-      margin-bottom: 1rem;
-    }
-
-    /* ─── Loading ───────────────────────────────────────────── */
-    .spinner {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 4rem;
-      color: var(--text-muted);
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    .spinner::before {
-      content: '';
-      width: 24px;
-      height: 24px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-      margin-right: 0.75rem;
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>skillgrade results</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%231b1f24'/%3E%3Cpath d='M2 21h20M5 18v-6M10 18V6M15 18v-9M20 18V3' fill='none' stroke='%236ea8fe' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E">
+<style>
+/* Neutral palette, light and dark: the accent for small details, its gradient for big numbers only; --bad for failures.
+   The *-rgb tokens feed rgba(var(--x-rgb), alpha) wherever a tint of a color is needed. */
+:root {
+  color-scheme: light;
+  --fg-rgb: 27,31,36; --acc-rgb: 47,111,235; --bad-rgb: 207,34,46;
+  --bg: #ffffff; --fg: rgb(var(--fg-rgb)); --acc: rgb(var(--acc-rgb)); --acc2: #0f9b8e; --bad: rgb(var(--bad-rgb)); --gray: #6e7781;
+  --panel: #f6f8fa; --code: #f6f8fa; --hover: #f3f5f8; --shadow: rgba(31,35,40,.15);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --fg-rgb: 232,234,237; --acc-rgb: 110,168,254; --bad-rgb: 240,113,120;
+    --bg: #0f1115; --acc2: #4fd1c5; --gray: #8b9099;
+    --panel: #16181d; --code: #12141a; --hover: #1a1d23; --shadow: var(--shadow);
+  }
+}
+:root {
+  --muted: rgba(var(--fg-rgb),.62); --faint: rgba(var(--fg-rgb),.5); --soft: rgba(var(--fg-rgb),.72);
+  --line: rgba(var(--fg-rgb),.10); --line2: rgba(var(--fg-rgb),.16);
+  --sunset: linear-gradient(90deg, var(--acc) 0%, var(--acc2) 100%);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--fg); text-decoration: none; } a:hover { color: var(--acc); }
+.mono, code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.muted { color: var(--muted); } .faint { color: var(--faint); }
+.grad { background: var(--sunset); -webkit-background-clip: text; background-clip: text; color: transparent; display: inline-block; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px); }
+
+header { border-bottom: 1px solid var(--line); }
+header .wrap { height: 64px; display: flex; align-items: center; gap: 24px; }
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 26px; letter-spacing: -.01em; }
+#crumbs { display: flex; flex-wrap: wrap; gap: 8px; font-size: 14px; color: var(--muted); min-width: 0; }
+#crumbs a { color: var(--muted); } #crumbs a:hover { color: var(--acc); } #crumbs span:last-child { color: var(--fg); }
+main.wrap { padding-top: 56px; padding-bottom: 96px; }
+
+.eyebrow { margin: 0 0 14px; font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font-weight: 500; letter-spacing: -.035em; line-height: 1.02; }
+h1.big { font-size: clamp(40px, 5.4vw, 68px); }
+h1.name { font-size: clamp(40px, 6vw, 72px); letter-spacing: -.04em; }
+h1.id { font-size: clamp(24px, 3.4vw, 40px); font-weight: 400; letter-spacing: -.02em; word-break: break-all; }
+h2 { margin: 0; font-size: 24px; font-weight: 500; letter-spacing: -.02em; }
+h3 { margin: 0; font-size: 20px; font-weight: 500; letter-spacing: -.02em; }
+.lede { margin: 20px 0 0; max-width: 680px; font-size: 17px; line-height: 1.6; color: var(--soft); }
+.note { margin: 8px 0 0; max-width: 720px; font-size: 14px; line-height: 1.6; color: var(--muted); }
+section { margin-top: 64px; }
+.head { display: flex; flex-wrap: wrap; gap: 24px 32px; justify-content: space-between; align-items: flex-end; }
+.pills { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pill { font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line2); white-space: nowrap; }
+.pill.on { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 600; }
+.pill.warn { border-color: rgba(var(--bad-rgb),.6); color: var(--bad); }
+.pill.y { border-color: rgba(var(--acc-rgb),.55); color: var(--acc); }
+.pill.dim { color: var(--muted); border-color: rgba(var(--fg-rgb),.2); }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 16px; margin-top: 40px; }
+.stat { padding: 24px; border: 1px solid var(--line); border-radius: 16px; }
+.stat:first-child { border-color: var(--line2); background: var(--panel); }
+.stat .l { font-size: 13px; color: var(--muted); }
+.stat .v { font-size: 60px; font-weight: 300; line-height: 1; letter-spacing: -.04em; margin-top: 14px; }
+.stat .v small { font-size: 30px; color: var(--faint); }
+.stat .s { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+.hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 48px; align-items: end; }
+@media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); }
+.kpis div { padding: 24px 20px; border-left: 1px solid var(--line2); }
+.kpis div:nth-child(4n+1) { padding-left: 0; border-left: 0; }
+.kpis div:nth-child(n+5) { border-top: 1px solid var(--line2); }
+.kpis b { display: block; font-size: 56px; font-weight: 300; line-height: 1; letter-spacing: -.03em; }
+.kpis span { display: block; margin-top: 8px; font-size: 14px; color: var(--muted); }
+.kpis small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
+@media (max-width: 860px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis div:nth-child(n) { padding-left: 20px; border-left: 1px solid var(--line2); border-top: 0; }
+  .kpis div:nth-child(odd) { padding-left: 0; border-left: 0; } .kpis div:nth-child(n+3) { border-top: 1px solid var(--line2); } }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; justify-content: space-between; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+.chip { height: 44px; padding: 0 18px; border-radius: 22px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; background: transparent; color: var(--fg); border: 1px solid rgba(var(--fg-rgb),.2); }
+.chip:hover { border-color: rgba(var(--fg-rgb),.5); }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.chip span { opacity: .6; margin-left: 6px; }
+/* resets the generic details/summary rules below (trial lists) that otherwise draw a top border and pad it */
+.sortmenu { position: relative; display: flex; border: 0; padding: 0; }
+.sortmenu > summary { display: flex; align-items: center; justify-content: flex-start; gap: 8px; line-height: 1; font-size: 14px; }
+.sortmenu > summary::-webkit-details-marker { display: none; }
+.sortmenu[open] > summary { border-color: rgba(var(--fg-rgb),.5); }
+.sortmenu .menu { position: absolute; top: 52px; left: 0; z-index: 10; min-width: 240px; padding: 8px; background: var(--panel); border: 1px solid var(--line2); border-radius: 16px; box-shadow: 0 16px 40px var(--shadow); }
+.sortmenu .menu .h { padding: 8px 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.sortmenu .menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
+.sortmenu .menu button { display: flex; width: 100%; justify-content: space-between; gap: 16px; padding: 8px 12px; border: 0; border-radius: 10px; background: none; color: var(--soft); font: 500 14px system-ui, -apple-system, "Segoe UI", sans-serif; text-align: left; cursor: pointer; }
+.sortmenu .menu button:hover { background: rgba(var(--fg-rgb),.06); color: var(--fg); }
+.sortmenu .menu button[aria-pressed="true"] { color: var(--fg); }
+.sortmenu .menu button[aria-pressed="true"]::after { content: "✓"; color: var(--acc); }
+.search { position: relative; display: block; width: min(320px, 100%); }
+.search svg { position: absolute; left: 14px; top: 13px; }
+.search input { width: 100%; height: 44px; padding: 0 16px 0 42px; background: var(--code); border: 1px solid var(--line2); border-radius: 22px; color: var(--fg); font: inherit; font-size: 15px; }
+.search input::placeholder { color: rgba(var(--fg-rgb),.45); }
+/* quarter-width tiles, an evaluated skill spans two; dense packing fills the gap a wide tile leaves at a row end */
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-flow: dense; gap: 16px; margin-top: 24px; }
+@media (max-width: 1000px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.card { display: flex; flex-direction: column; gap: 12px; padding: 24px; border: 1px solid var(--line); border-radius: 16px; min-height: 220px; transition: border-color .15s, background .15s; }
+a.card:hover { border-color: rgba(var(--fg-rgb),.38); background: var(--hover); color: var(--fg); }
+.card .t { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+.card p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card .foot { margin-top: auto; padding-top: 16px; border-top: 1px dashed rgba(var(--fg-rgb),.14); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.card.feat { grid-column: span 2; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; padding: 28px; border-color: var(--line2); background: var(--panel); }
+.card.feat .t { font-size: 22px; }
+.card.feat p { font-size: 15px; color: var(--soft); -webkit-line-clamp: 4; }
+.card.feat .meta { margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); }
+.card.feat .side { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 16px; min-width: 200px; text-align: right; }
+.card.feat .score { font-size: 72px; font-weight: 300; line-height: 1; letter-spacing: -.04em; margin-top: 6px; }
+.card.err { border-color: rgba(var(--bad-rgb),.5); }
+@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .card.feat { grid-column: auto; grid-template-columns: 1fr; } .card.feat .side { align-items: flex-start; text-align: left; } }
+.ci { width: 200px; }
+.ci .track { position: relative; height: 6px; border-radius: 3px; background: var(--line); }
+.ci .band { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: rgba(var(--fg-rgb),.22); }
+.ci .mark { position: absolute; top: -4px; width: 2px; height: 14px; background: var(--fg); }
+.ci .axis { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--faint); }
+.go { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+
+.panel { margin-top: 24px; padding: 32px; border: 1px solid var(--line); border-radius: 20px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 20px; font-size: 13px; color: var(--soft); }
+.legend span { display: flex; align-items: center; gap: 8px; }
+.ring { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--acc); }
+.chart-scroll { overflow-x: auto; padding: 32px 8px 64px 44px; margin: 0 -8px; }
+.chart { position: relative; }
+.yt { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid rgba(var(--fg-rgb),.08); }
+.yt span { position: absolute; left: -44px; top: -8px; font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--faint); }
+.base { position: absolute; left: 0; right: 0; bottom: -1px; border-top: 1px solid rgba(var(--fg-rgb),.3); }
+.xmajor { position: absolute; top: 100%; width: 0; }
+.xmajor i { display: block; width: 1px; height: 10px; background: var(--fg); }
+.xmajor b, .xmajor small { position: absolute; left: 0; transform: translateX(-50%); white-space: nowrap; }
+.xmajor b { top: 16px; font-size: 12px; font-weight: 400; } .xmajor small { top: 34px; font-size: 11px; color: var(--faint); }
+.xminor { position: absolute; top: 100%; width: 1px; height: 6px; margin-left: 0; background: rgba(var(--fg-rgb),.5); }
+.pending { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(var(--acc-rgb),.28); }
+.pending i { position: absolute; left: -6px; bottom: -6px; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--acc); background: var(--bg); }
+.chart > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.chart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.dot { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 3px solid var(--bg); }
+/* score-by-task: hovering a version's bar shows every task's value there */
+.hz { position: absolute; top: 0; bottom: 0; width: 28px; margin-left: -14px; z-index: 3; }
+.hz::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid transparent; }
+.hz:hover::before { border-color: rgba(var(--fg-rgb),.4); }
+.hz .tip { display: none; position: absolute; top: 0; left: calc(100% + 2px); padding: 6px 10px; background: var(--panel); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 16px 40px var(--shadow); white-space: nowrap; pointer-events: none; }
+.hz.flip .tip { left: auto; right: calc(100% + 2px); }
+.hz:hover .tip { display: block; }
+.tip .tr { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.7; }
+.tip .tr b { margin-left: auto; font-weight: 500; }
+.chart.many .dot { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-width: 2.5px; }
+.dotl { position: absolute; margin-top: -32px; transform: translateX(-50%); font-size: 12px; white-space: nowrap; }
+.wh { position: absolute; width: 2px; margin-left: -1px; background: rgba(var(--fg-rgb),.45); }
+.lg { width: 22px; height: 4px; }
+
+.tbl { margin-top: 20px; overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 14px 12px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+td { padding: 14px 12px; border-top: 1px solid rgba(var(--fg-rgb),.08); vertical-align: middle; }
+th:first-child, td:first-child { padding-left: 20px; } th:last-child, td:last-child { padding-right: 20px; }
+tbody tr:hover td { background: var(--hover); }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.mono, .mono.sm { font-size: 13px; }
+.bar { display: flex; align-items: center; gap: 12px; min-width: 160px; }
+.bar span { width: 36px; font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.bar div { flex-grow: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.bar i { display: block; height: 4px; border-radius: 2px; background: rgba(var(--fg-rgb),.35); }
+.bar.hi i { background: var(--sunset); } .bar.w i { background: var(--fg); }
+.err { color: var(--bad); }
+.cell { text-align: center; white-space: nowrap; font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.cell small { display: block; color: var(--muted); font-size: 11px; }
+.pivot { display: inline-block; max-width: 100%; } .pivot table { width: auto; } .pivot td:first-child { white-space: nowrap; } .pivot .cell { width: 112px; min-width: 112px; }
+.diff { color: var(--acc); }
+
+.tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 16px; margin-top: 20px; }
+.task { display: flex; flex-direction: column; gap: 14px; padding: 24px; border: 1px solid rgba(var(--fg-rgb),.12); border-radius: 16px; transition: border-color .15s; }
+a.task:hover { border-color: rgba(var(--fg-rgb),.38); color: var(--fg); }
+.task .top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.task .top b { font: 500 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.task .top span { font-size: 28px; font-weight: 300; letter-spacing: -.02em; }
+.task q { font-size: 14px; line-height: 1.6; color: var(--muted); font-style: italic; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.checks { margin-top: auto; display: flex; flex-wrap: wrap; gap: 6px; }
+.ck { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 4px 10px; border-radius: 6px; background: rgba(var(--fg-rgb),.08); white-space: nowrap; }
+.ck.no { background: transparent; border: 1px solid rgba(var(--bad-rgb),.6); color: var(--bad); }
+.ck.part { background: transparent; border: 1px solid rgba(var(--fg-rgb),.3); }
+.tn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid rgba(var(--fg-rgb),.24); font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; transition: background .15s, color .15s; }
+.tn:hover { background: var(--fg); color: var(--bg); }
+.tn.no { border-color: rgba(var(--bad-rgb),.6); color: var(--bad); } .tn.errd { border-style: dashed; color: var(--faint); }
+.tns { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; margin-top: 64px; }
+.box { padding: 28px; border: 1px solid var(--line); border-radius: 16px; min-width: 0; }
+dl { margin: 20px 0 0; display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 14px 16px; font-size: 14px; }
+dt { color: var(--muted); } dd { margin: 0; font-size: 13px; word-break: break-all; }
+.chk { display: grid; grid-template-columns: 28px minmax(120px, 200px) minmax(0, 1fr); gap: 16px; padding: 18px 24px; align-items: baseline; border-top: 1px solid rgba(var(--fg-rgb),.08); }
+.chk:first-child { border-top: 0; }
+pre { margin: 12px 0 0; padding: 14px; border-radius: 10px; background: var(--code); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--soft); max-height: 520px; overflow: auto; }
+pre.out { padding: 24px 28px; font: 14px/1.7 system-ui, -apple-system, "Segoe UI", sans-serif; color: rgba(var(--fg-rgb),.86); border-radius: 16px; }
+details { border-top: 1px solid rgba(var(--fg-rgb),.08); padding: 16px 20px; }
+details:first-child { border-top: 0; }
+summary { cursor: pointer; display: flex; justify-content: space-between; gap: 12px; list-style: none; font-size: 13px; }
+summary::-webkit-details-marker { display: none; }
+summary > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list { margin-top: 16px; border: 1px solid var(--line); border-radius: 16px; }
+details.solo { margin-top: 48px; border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px; }
+details.solo summary { font: 600 15px system-ui, -apple-system, "Segoe UI", sans-serif; }
+details.ub { border: 0; padding: 0; margin-top: 12px; }
+details.ub summary { color: var(--bad); font-size: 13px; cursor: pointer; }
+details.ub table { margin-top: 10px; font-size: 13px; }
+details.ub td { padding: 3px 12px 3px 0; }
+.ubrow { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 16px; margin-top: 18px; }
+.ubrow details.ub { margin-top: 6px; }
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 999px; overflow: hidden; }
+.seg button { font: 500 13px system-ui, -apple-system, "Segoe UI", sans-serif; padding: 5px 12px; background: none; color: var(--muted); border: 0; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.harm { font: 600 13px system-ui, -apple-system, "Segoe UI", sans-serif; padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(var(--acc-rgb),.55); background: none; color: var(--acc); cursor: pointer; }
+.harm[aria-pressed="true"] { background: var(--acc); color: var(--bg); }
+blockquote { margin: 24px 0 0; padding-left: 20px; border-left: 1px solid rgba(var(--fg-rgb),.3); font-size: 18px; line-height: 1.6; color: rgba(var(--fg-rgb),.82); white-space: pre-wrap; }
+.banner { margin-top: 40px; padding: 12px 16px; border: 1px dashed rgba(var(--bad-rgb),.6); border-radius: 12px; font-size: 14px; color: var(--bad); }
+.empty { margin: 48px 0; text-align: center; color: var(--muted); }
+footer { margin-top: 96px; padding-top: 24px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--faint); }
+</style>
 </head>
-
 <body>
-  <div class="shell" id="app">
-    <div class="topbar">
-      <h1><span style="color:var(--text)">skill</span><span style="color:var(--text-muted)">grade</span></h1>
-      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">◐ Dark</button>
-    </div>
-    <div id="content">
-      <div class="spinner">Loading reports…</div>
-    </div>
-  </div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="sunset" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="100" y2="0"><stop offset="0" style="stop-color:var(--acc)"/><stop offset="1" style="stop-color:var(--acc2)"/></linearGradient></defs></svg>
+<header><div class="wrap">
+<a class="brand" href="#/"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" style="stroke:var(--acc)" stroke-width="1.5" stroke-linecap="square" aria-hidden="true"><path d="M2 21h20M5 18v-6M10 18V6M15 18v-9M20 18V3"/></svg>skillgrade</a>
+<nav id="crumbs" aria-label="Breadcrumb"></nav>
+</div></header>
+<main class="wrap" id="app"><p class="muted">Loading…</p></main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const f2 = x => x == null ? "—" : x.toFixed(2);
+const pct = x => x == null ? "—" : Math.round(x * 100) + "%";
+const sgn = x => x == null ? "—" : (x > 0 ? "+" : "") + x.toFixed(2);
+const short = h => esc((h || "").slice(0, 7));
+const enc = encodeURIComponent;
+const ci = v => v.se == null ? "" : `± ${(2 * v.se).toFixed(2)}`;
+const ms = x => { if (x == null) return "—"; const s = Math.round(x / 1000); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`; };
+const when = id => { const m = /^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)/.exec(id); return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}Z` : id; };
+const day = iso => new Date(iso).toLocaleDateString("en", {month: "short", day: "numeric"});
+const sum = (xs, f) => xs.reduce((a, x) => a + (f(x) || 0), 0);
+const arrow = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>`;
+const cross = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--bad)" stroke-width="1.5" stroke-linecap="square" role="img" aria-label="failed"><path d="M5 5l14 14M19 5L5 19"/></svg>`;
+const tick = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--fg)" stroke-width="1.5" stroke-linecap="square" role="img" aria-label="passed"><path d="M4 12.5l5 5L20 6.5"/></svg>`;
+const S = {filter: "all", query: "", sort: "score", rev: false, harm: false, mode: "pessimistic"};  // landing filter, skill-page harmonize; kept across re-renders
 
-  <script>
-    // ─── Theme ─────────────────────────────────────────────────
-    function getTheme() { return localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'); }
-    function applyTheme(t) {
-      document.documentElement.setAttribute('data-theme', t);
-      localStorage.setItem('theme', t);
-      document.getElementById('themeBtn').textContent = t === 'dark' ? '☀ Light' : '◐ Dark';
-    }
-    function toggleTheme() { applyTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
-    applyTheme(getTheme());
+// 95%-ish Wilson interval, same as report.wilson.
+function wilson(k, n, z = 2) {
+  if (!n) return [0, 1];
+  const p = k / n, c = (p + z * z / (2 * n)) / (1 + z * z / n), h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n);
+  return [Math.max(0, c - h), Math.min(1, c + h)];
+}
+function verdictPill(v) {
+  if (!v) return `<span class="pill dim">No Δ yet</span>`;
+  const cls = v.startsWith("better") ? "on" : v.startsWith("worse") ? "warn" : "dim";
+  return `<span class="pill ${cls}" title="${esc(v)}">${esc(v.split(" (")[0].split(" —")[0])}</span>`;
+}
+function ciBar(v) {
+  const lo = v.se == null ? v.mean : Math.max(0, v.mean - 2 * v.se), hi = v.se == null ? v.mean : Math.min(1, v.mean + 2 * v.se);
+  return `<div class="ci"><div class="track"><div class="band" style="left:${lo * 100}%;width:${(hi - lo) * 100}%"></div><div class="mark" style="left:calc(${v.mean * 100}% - 1px)"></div></div><div class="axis mono"><span>0</span><span>95% interval</span><span>1</span></div></div>`;
+}
+const bar = (x, cls = "") => `<div class="bar ${cls}"><span>${f2(x)}</span><div><i style="width:${Math.round((x || 0) * 100)}%"></i></div></div>`;
+function ckChip(name, k, n, evidence) {
+  const cls = k === n ? "" : k === 0 ? "no" : "part";
+  return `<span class="ck ${cls}" title="${esc(evidence || "")}">${k === n ? "✓" : k === 0 ? "✗" : "◐"} ${esc(name)}${n > 1 ? ` ${k}/${n}` : ""}</span>`;
+}
+// {check: {k, n, evidence of a failure}} over a list of trials
+function tally(trials) {
+  const out = {};
+  for (const t of trials) for (const c of t.checks) {
+    const o = out[c.check] ??= {k: 0, n: 0, evidence: ""};
+    o.n++; if (c.ok) o.k++; else if (!o.evidence) o.evidence = c.evidence;
+  }
+  return out;
+}
 
-    // ─── State ─────────────────────────────────────────────────
-    let reports = [];
-    const $ = id => document.getElementById(id);
-    const esc = s => s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+// Score over commits. Major ticks: commits that touched the skill; minor ticks: commits that changed only its
+// other inputs (eval files, fixtures, the repo paths tasks copy in). series: [{name, color, dot?, dash?, get(c) → {v, lo?, hi?, n?} | null}]
+function commitChart(hist, series, height = 280) {
+  const n = hist.length;
+  if (!n) return `<p class="muted">No commit touches this skill yet.</p>`;
+  const X = i => n === 1 ? 50 : 3 + 94 * i / (n - 1), Y = v => (1 - v) * 100;
+  const majors = hist.filter(c => c.kind === "skill").length, every = Math.max(1, Math.ceil(majors / 14));
+  const lastMajor = hist.map(c => c.kind).lastIndexOf("skill");
+  let g = [1, .75, .5, .25, 0].map(t => `<div class="yt" style="top:${Y(t)}%"><span>${t.toFixed(2)}</span></div>`).join("");
+  let svg = "", marks = "", m = 0;
+  hist.forEach((c, i) => {
+    const what = `${esc(c.commit.slice(0, 7))} · ${esc(day(c.date))} · ${esc(c.subject)}`;
+    if (c.kind !== "skill") { g += `<div class="xminor" style="left:${X(i)}%" title="Workspace changed: ${what}"></div>`; return; }
+    const label = m++ % every === 0 || i === lastMajor;
+    g += `<div class="xmajor" style="left:${X(i)}%" title="${what}"><i></i>${label ? `<b class="mono">${short(c.commit)}</b><small>${esc(day(c.date))}</small>` : ""}</div>`;
+    if (!series.some(s => s.get(c))) g += `<div class="pending" style="left:${X(i)}%" title="Skill changed, not evaluated: ${what}"><i></i></div>`;
+  });
+  const at = {};  // commit index → [{s, v}]: what the hover box on that version's bar lists
+  series.forEach(s => {
+    const pts = [];
+    hist.forEach((c, i) => {
+      const v = s.get(c);
+      if (!v) return;
+      const x = X(i);
+      pts.push(`${x},${Y(v.v)}`);
+      if (v.lo != null) marks += `<div class="wh" style="left:${x}%;top:${Y(v.hi)}%;height:${Y(v.lo) - Y(v.hi)}%"></div>`;
+      if (series.length > 1) { (at[i] = at[i] || []).push({s, v}); marks += `<div class="dot" style="left:${x}%;top:${Y(v.v)}%;background:${s.dot || s.color}"></div>`; }
+      else marks += `<div class="dot" style="left:${x}%;top:${Y(v.v)}%;background:${s.dot || s.color}" title="${esc(s.name)} · ${short(c.commit)}: ${v.v.toFixed(2)}${v.n ? ` (n=${v.n})` : ""}"></div>`;
+      if (series.length === 1) marks += `<div class="dotl mono" style="left:${x}%;top:${Y(v.v)}%">${v.v.toFixed(2)}</div>`;
+    });
+    svg += `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts.join(" ")}" style="stroke:${s.color}" stroke-dasharray="${s.dash || "none"}"/></svg>`;
+  });
+  for (const [i, on] of Object.entries(at)) {
+    const rows = on.slice().sort((a, b) => b.v.v - a.v.v);
+    marks += `<div class="hz${X(i) > 60 ? " flip" : ""}" style="left:${X(i)}%"><div class="tip">${rows.map(({s, v}) => `<div class="tr"><svg width="36" height="10" aria-hidden="true"><line x1="0" y1="5" x2="36" y2="5" style="stroke:${s.color}" stroke-width="2" stroke-dasharray="${s.dash ? "3 3" : "none"}"/><circle cx="18" cy="5" r="3.5" style="fill:${s.dot || s.color};stroke:var(--panel)" stroke-width="1.5"/></svg><b class="mono">${v.v.toFixed(2)}</b></div>`).join("")}</div></div>`;
+  }
+  return `<div class="chart-scroll"><div class="chart${series.length > 1 ? " many" : ""}" role="img" aria-label="Score by commit" style="height:${height}px;min-width:${Math.max(majors * 72, 320)}px">${g}${svg}${marks}<div class="base"></div></div></div>`;
+}
+const TASK_LINES = [{color: "var(--fg)"}, {color: "var(--acc)"}, {color: "var(--bad)"}, {color: "var(--fg)", dash: "5 4"}, {color: "var(--gray)"},
+                    {color: "var(--acc)", dash: "5 4"}, {color: "var(--bad)", dash: "5 4"}, {color: "var(--gray)", dash: "5 4"}];
+const scoreOf = c => c.score && {v: c.score.mean, n: c.score.n, ...(c.score.se == null ? {} : {lo: Math.max(0, c.score.mean - 2 * c.score.se), hi: Math.min(1, c.score.mean + 2 * c.score.se)})};
+const taskOf = name => c => c.tasks[name] && {v: c.tasks[name].mean, n: c.tasks[name].n};
+const lineKey = l => `<svg class="lg" aria-hidden="true"><line x1="0" y1="2" x2="22" y2="2" style="stroke:${l.color}" stroke-width="2" stroke-dasharray="${l.dash || "none"}"/></svg>`;
 
-    // ─── Router ────────────────────────────────────────────────
-    function navigate(view, data) {
-      if (view === 'list') renderList();
-      else if (view === 'detail') loadDetail(data);
-    }
+const page = (eyebrow, title, cls, lede) => `<p class="eyebrow">${eyebrow}</p><h1 class="${cls}">${title}</h1>${lede ? `<p class="lede">${lede}</p>` : ""}`;
+// The score is the mean over all trials: a task with more valid trials weighs more in it.
+const UNBALANCED = "⚠ Unbalanced score — tasks with more trials carry more weight in the score";
+const balance = v => !v.unbalanced ? "" : `<details class="ub"><summary>${UNBALANCED}</summary>
+  <table>${Object.entries(v.tasks).map(([t, n]) => `<tr><td class="mono">${esc(t)}</td><td class="num mono">${n} valid trial${n === 1 ? "" : "s"}</td></tr>`).join("")}</table>
+  <p class="note">Run skillgrade trials to have every task matching by number of trials.</p></details>`;
+// Under the skill title: the badge, and Harmonize — the same k trials from every task (worst k or best k).
+const balanceRow = v => !v.unbalanced ? "" : `<div class="ubrow">${balance(v)}
+  <button type="button" class="harm" data-harm aria-pressed="${S.harm}" title="Score the same number of trials from every task">Harmonize</button>
+  <span class="seg" role="group" aria-label="Which trials harmonize keeps">${["pessimistic", "optimistic"].map(m =>
+    `<button type="button" data-mode="${m}" aria-pressed="${S.mode === m}" title="${m === "pessimistic" ? "Each task's worst" : "Each task's best"} trials">${m}</button>`).join("")}</span></div>`;
+// The score card's numbers: the plain score, or the harmonized one while Harmonize is on.
+const scoreView = v => {
+  const H = S.harm && v.unbalanced && v.harmonized && v.harmonized[S.mode];
+  if (!H) return {label: "Current score", v};
+  const tasks = Object.keys(v.tasks).length - H.left_out.length;
+  return {label: `Harmonized score · ${S.mode}`, v: H,
+    note: ` · ${H.per_task} per task × ${tasks} tasks${H.left_out.length ? ` · left out (no valid trials): ${H.left_out.map(esc).join(", ")}` : ""}`};
+};
+const stat = (l, v, s, grad) =>`<div class="stat"><div class="l">${l}</div><div class="v${grad ? " grad" : ""}">${v}</div><div class="s">${s}</div></div>`;
+const taskFiles = (s, runId, task) => Object.entries(s.trials[runId] || {}).filter(([f]) => (s.summary.runs.find(r => r.id === runId)?.tasks || []).some(t => t.file === f && t.task === task));
 
-    // ─── List View ─────────────────────────────────────────────
-    async function renderList() {
-      const res = await fetch('/api/reports');
-      reports = await res.json();
+// ---------- landing ----------
+function home(m) {
+  const ev = m.skills.filter(s => s.has_eval), runs = m.skills.flatMap(s => s.summary ? s.summary.runs : []);
+  const scored = ev.filter(curV), last = runs.map(r => r.id).sort().at(-1), trials = sum(runs, r => r.trials), err = sum(runs, r => r.errored);
+  // a skill changed since its last eval: its newest skill commit has no score yet
+  const stale = scored.filter(s => { const c = (s.history || []).filter(c => c.kind === "skill").at(-1); return c && !c.score; });
+  const worse = ev.filter(s => /^worse/.test(s.summary?.verdict || ""));
+  const kpi = (b, span, small, grad) => `<div><b${grad ? ' class="grad"' : ""}>${b}</b><span>${span}</span>${small ? `<small>${small}</small>` : ""}</div>`;
+  return `<section style="margin-top:16px"><div class="kpis">
+      ${kpi(scored.length ? f2(sum(scored, s => curV(s).mean) / scored.length) : "—", "mean current score", `over ${scored.length} scored skill${scored.length === 1 ? "" : "s"}`, true)}
+      ${kpi(m.skills.length, "skills with results", `${m.skills.length - scored.length} not scored yet`)}
+      ${kpi(stale.length, "changed since last eval", stale.length ? stale.map(s => esc(s.name)).join(", ") : "every skill commit scored")}
+      ${kpi(worse.length, "regressed beyond noise", worse.length ? worse.map(s => esc(s.name)).join(", ") : "vs each skill's previous version")}
+      ${kpi(sum(ev, s => s.tasks.length), "tasks", `${sum(ev, s => s.summary ? s.summary.checks.length : 0)} distinct checks`)}
+      ${kpi(trials, "valid trials recorded", "")}
+      ${kpi(err, "errored trials, excluded", trials + err ? `${pct(err / (trials + err))} of all trials` : "")}
+      ${kpi(runs.length, "runs", last ? `last ${esc(when(last))}` : "")}</div></section>
+    <section style="margin-top:56px"><div class="toolbar"><div class="pills" role="group" aria-label="Filter skills">
+      ${[["all", "All", m.skills.length], ["eval", "Scored", scored.length], ["none", "Not scored", m.skills.length - scored.length]].map(([k, l, n]) =>
+        `<button type="button" class="chip" data-filter="${k}" aria-pressed="${S.filter === k}">${l}<span>${n}</span></button>`).join("")}
+      <details class="sortmenu"><summary class="chip" aria-label="Sort skills"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/></svg><b id="sortlabel" style="font-weight:600">${SORTS[S.sort].label}</b></summary><div class="menu" id="sort">${sortCtl()}</div></details></div>
+      <label class="search"><span class="sr">Search skills</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--muted)" stroke-width="1.5" stroke-linecap="square" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg><input type="search" id="q" placeholder="Search skills" value="${esc(S.query)}"></label></div>
+    <div class="grid" id="cards">${cards(m)}</div></section>
+    <footer><span class="mono">skillgrade preview browser</span><span>${esc(m.root)}</span></footer>`;
+}
+// Each key sorts ascending in its natural order, so score and confidence read best first. Whatever the key or
+// direction, skills with no score sort after scored ones, and skills with no eval after those.
+const curV = s => s.summary?.versions.at(-1);
+const SORTS = {
+  score: {label: "Score", nat: "Highest first", rev: "Lowest first", key: s => curV(s) ? -curV(s).mean : null},
+  conf: {label: "Confidence", nat: "Most confident first", rev: "Least confident first", title: "Narrowest ± 2 SE first; a single trial has no interval",
+         key: s => curV(s)?.n > 1 ? curV(s).se : null},
+  name: {label: "Name", nat: "A → Z", rev: "Z → A", key: s => s.name},
+};
+const sortCtl = () => `<div class="h">Sort by</div>${Object.entries(SORTS).map(([k, o]) =>
+    `<button type="button" data-sort="${k}" aria-pressed="${S.sort === k}"${o.title ? ` title="${o.title}"` : ""}>${o.label}</button>`).join("")}
+  <hr><div class="h">Order</div>${[false, true].map(rev =>
+    `<button type="button" data-rev="${rev}" aria-pressed="${S.rev === rev}">${SORTS[S.sort][rev ? "rev" : "nat"]}</button>`).join("")}`;
+const tier = (s, k) => !s.has_eval ? 3 : !curV(s) ? 2 : k == null ? 1 : 0;
+const bySort = (a, b) => {
+  const key = SORTS[S.sort].key, x = key(a), y = key(b);
+  const t = tier(a, x) - tier(b, y);
+  if (t || x == null) return t || a.name.localeCompare(b.name);
+  const c = typeof x === "string" ? x.localeCompare(y) : x - y;
+  return (S.rev ? -c : c) || a.name.localeCompare(b.name);
+};
+function cards(m) {
+  const q = S.query.trim().toLowerCase();
+  const shown = m.skills.filter(s => S.filter === "all" || (S.filter === "eval") === !!curV(s))
+    .filter(s => !q || s.name.includes(q) || (s.description || "").toLowerCase().includes(q))
+    .sort(bySort);
+  if (!shown.length) return `<p class="empty" style="grid-column:1/-1">No skill matches that search.</p>`;
+  return shown.map(s => {
+    if (s.error) return `<div class="card err"><div class="t">${esc(s.name)}</div><p class="err">${esc(s.error)}</p></div>`;
+    if (!s.has_eval) return `<a class="card" href="#/s/${enc(s.name)}"><div class="t">${esc(s.name)}</div><p>${esc(s.description)}</p><div class="foot"><span>No eval yet</span><code class="sm" style="font-size:12px;color:var(--soft)">skillgrade init</code></div></a>`;
+    const Su = s.summary, v = Su && Su.versions.at(-1), last = Su && Su.runs.at(-1);
+    return `<a class="card feat" href="#/s/${enc(s.name)}"><div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t">${esc(s.name)}</span>${Su && Su.verdict ? verdictPill(Su.verdict) : ""}</div>
+        <p>${esc(s.description)}</p>
+        <div class="meta"><span>${s.tasks.length} task${s.tasks.length === 1 ? "" : "s"}</span><span>${Su ? Su.runs.length : 0} runs</span>${Su && Su.model ? `<span class="mono">${esc(Su.model)}</span>` : ""}${last ? `<span>Last run ${esc(when(last.id))}</span>` : ""}</div></div>
+      <div class="side">${v ? `<div><div class="muted" style="font-size:13px">Current score</div><div class="score grad">${f2(v.mean)}</div><div class="mono muted" style="font-size:13px;margin-top:6px">${ci(v) || "single trial"} · n ${v.n}</div>${v.unbalanced ? `<span class="pill warn" style="display:inline-block;margin-top:10px" title="${esc(UNBALANCED)} — open the skill for trials per task">⚠ Unbalanced score</span>` : ""}</div>${ciBar(v)}`
+        : `<div class="muted" style="font-size:14px">${Su && Su.runs.length ? "No valid trials yet" : "No runs yet"}</div>`}
+        <span class="go">Open skill ${arrow}</span></div></a>`;
+  }).join("");
+}
 
-      if (!reports.length) {
-        $('content').innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div>No reports found. Run an eval first.</div></div>';
-        return;
-      }
+// ---------- skill ----------
+function skillPage(s) {
+  const Su = s.summary;
+  const cur = Su && Su.versions.at(-1);
+  let h = `<section class="head" style="margin-top:0"><div>${page("Skill", esc(s.name), "name", esc(s.description))}${cur ? balanceRow(cur) : ""}</div>`;
+  if (!s.has_eval) return h + `</section><section><p class="lede">No <code>eval.yaml</code> for this skill yet — author one with <code>skillgrade init</code>.</p></section>` + skillMd(s);
+  const tiers = [...new Set(s.tasks.map(t => t.metadata && t.metadata.tier).filter(Boolean))];
+  h += `<div class="pills"><span class="pill">${s.tasks.length} tasks${tiers.length ? ` · tier ${esc(tiers.join(", "))}` : ""}</span>${Su && Su.model ? `<span class="pill mono">${esc(Su.model)}</span>` : ""}<span class="pill mono" title="${esc(s.eval_dir || "")}">skillgrade --smoke</span></div></section>`;
+  if (!Su || !Su.runs.length) return h + `<section><p class="lede">No runs yet: <code>skillgrade --smoke</code></p></section>` + skillMd(s) + tasksSection(s);
+  h += skillMd(s);
+  const v = Su.versions.at(-1);
+  if (v) {
+    const need = Su.trials_needed == null ? "—" : Su.trials_needed === 0 ? "enough" : `~${Su.trials_needed}`;
+    const sv = scoreView(v);
+    h += `<div class="stats">${stat(`${sv.label} · <span class="mono">${short(v.version)}</span>`, f2(sv.v.mean), `<span class="mono">${ci(sv.v) || "single trial"}</span> · ${sv.v.n} trials${sv.note || ""}`, true)}
+      ${stat("Δ vs previous version", sgn(Su.delta), Su.verdict ? verdictPill(Su.verdict) : "One comparable version so far")}
+      ${stat("Trials to resolve Δ", need, Su.trials_needed ? "more per side, at 2 SE" : "At 2 SE, equal n per version")}
+      ${stat("Runs", Su.runs.length, `${Su.runs.filter(r => !r.comparable).length} not compared · ${sum(Su.runs, r => r.errored)} errored trials`)}</div>`;
+  } else h += `<div class="banner">No valid trials yet — every trial errored.</div>`;
 
-      const rows = reports.map(r => {
-        const pr = (r.pass_rate * 100).toFixed(0);
-        const isPass = r.pass_rate >= 0.5;
-        const ts = r.file.match(/\d{4}-\d{2}-\d{2}T[\d-]+/)?.[0]?.replace(/-(?=\d{2}(?:Z|$))/g, ':') || '';
+  h += tasksSection(s);
+  const hist = s.history || [], skillN = hist.filter(c => c.kind === "skill").length;
+  h += `<div class="panel" style="margin-top:40px"><div class="head" style="align-items:flex-start"><div><h2>Score over time</h2>
+      <p class="note">Every commit that touched <span class="mono">${esc((s.skill_dirs || [])[0] || s.name)}</span>, oldest to newest, scored by the runs compared with the latest (same eval version and model). Minor ticks between them are commits that changed only the eval’s other inputs: eval.yaml, graders, fixtures, and the files its tasks copy in.</p></div>
+      <div style="display:flex;gap:28px;text-align:right"><div><div style="font-size:32px;font-weight:300">${skillN}</div><div class="muted" style="font-size:12px">skill commits</div></div>
+      <div><div style="font-size:32px;font-weight:300">${hist.length - skillN}</div><div class="muted" style="font-size:12px">workspace changes</div></div>
+      <div><div style="font-size:32px;font-weight:300">${hist.filter(c => c.score).length}</div><div class="muted" style="font-size:12px">evaluated</div></div></div></div>
+    <div class="legend"><span><span style="width:18px;height:2px;background:var(--sunset)"></span>Mean score, ±2 SE</span><span><span class="ring"></span>Skill changed, not evaluated</span><span><span style="width:1px;height:10px;background:rgba(var(--fg-rgb),.5)"></span>Workspace change</span></div>
+    ${commitChart(hist, [{name: s.name, color: "url(#sunset)", dot: "var(--fg)", get: scoreOf}], 300)}</div>`;
+  const lines = s.tasks.map((t, i) => ({...TASK_LINES[i % TASK_LINES.length], name: t.name, get: taskOf(t.name)}));
+  h += `<div class="panel"><h2>Score by task</h2><p class="note">Same commits, one line per task: its weighted score, the mean reward over that commit’s trials of the task.</p>
+    <div class="legend">${lines.map(l => `<span>${lineKey(l)}<a class="mono" href="#/s/${enc(s.name)}/k/${enc(l.name)}">${esc(l.name)}</a></span>`).join("")}</div>
+    ${commitChart(hist, lines, 260)}</div>`;
 
-        return `<a class="report-row" onclick="navigate('detail','${esc(r.file)}')" href="javascript:void(0)">
-      <div>
-        <div class="report-task">${esc(r.task)}</div>
-        <div class="report-file">${ts}</div>
-      </div>
-      <div class="report-metric"><div class="val">${pr}%</div><div class="lbl">Pass Rate</div></div>
-      <div class="report-metric"><div class="val">${r.trials?.length || 0}</div><div class="lbl">Trials</div></div>
-      <div class="report-metric"><div class="val">${r.pass_at_k != null ? (r.pass_at_k * 100).toFixed(0) + '%' : '—'}</div><div class="lbl">pass@k</div></div>
-      <div class="report-metric"><div class="val">${r.pass_pow_k != null ? (r.pass_pow_k * 100).toFixed(0) + '%' : '—'}</div><div class="lbl">pass^k</div></div>
-      <div><span class="badge ${isPass ? 'badge-pass' : 'badge-fail'}">${isPass ? 'PASS' : 'FAIL'}</span></div>
-    </a>`;
-      }).join('');
+  const shown = Su ? Su.versions.slice(-6).reverse() : [];  // latest first, then up to 5 older
+  if (v && Su.checks.length) h += `<section><h2>Check pass rate by version</h2><p class="note">Each check over the trials of the task that runs it, with its Wilson ~95% interval. Only runs compared with the latest.</p>
+    <div class="tbl pivot"><table><thead><tr><th>Skill version</th>${shown.map(v => `<th class="cell" style="text-transform:none;letter-spacing:0">${short(v.version)}<small>${short(v.commit)}</small></th>`).join("")}</tr></thead><tbody>
+    <tr><td class="muted">Trials</td>${shown.map(v => `<td class="cell">${v.n}</td>`).join("")}</tr>
+    <tr><td class="muted">Score</td>${shown.map(v => `<td class="cell">${f2(v.mean)}<small>${ci(v)}</small></td>`).join("")}</tr>
+    <tr><td class="muted">Δ</td>${shown.map(v => `<td class="cell">${sgn(v.delta)}</td>`).join("")}</tr>
+    ${Su.checks.map(c => `<tr><td class="mono">${esc(c)}</td>${shown.map(v => { const x = v.checks[c]; if (!x || x.rate == null) return `<td class="cell faint">—</td>`;
+        const rgb = x.rate >= .5 ? "var(--fg-rgb)" : "var(--bad-rgb)";
+        return `<td class="cell" style="background:rgba(${rgb},${(Math.abs(x.rate - .5) * 2 * .28 + .04).toFixed(2)})" title="${x.k}/${x.n ?? v.n} passed">${pct(x.rate)}<small>${pct(x.lo)}–${pct(x.hi)}</small></td>`; }).join("")}</tr>`).join("")}</tbody></table></div></section>`;
 
-      $('content').innerHTML = '<div class="reports-grid">' + rows + '</div>';
-    }
+  h += `<section><div class="head"><h2>Runs</h2><span class="muted" style="font-size:13px">Newest first · only committed runs on the latest eval version and model are compared</span></div>
+    <div class="tbl"><table style="min-width:900px"><thead><tr><th>Run</th><th>Commit</th><th>Skill version</th><th class="num">Tasks</th><th class="num">Trials</th><th class="num">Errored</th><th>Score</th><th class="num">pass@k</th><th class="num">pass^k</th><th>Status</th></tr></thead><tbody>
+    ${Su.runs.slice().reverse().map((r, i) => { const t = r.tasks.length === 1 ? r.tasks[0] : {}; const p = r.prov;
+      return `<tr><td><a class="mono sm" href="#/s/${enc(s.name)}/r/${enc(r.id)}">${esc(when(r.id))}</a></td>
+      <td class="mono muted">${short(p.commit)}${(p.dirty || []).length ? ` <span class="diff">+dirty</span>` : ""}</td>
+      <td class="mono muted">${short(r.skill_version)}</td><td class="num">${r.tasks.length}</td><td class="num">${r.trials}</td><td class="num ${r.errored ? "err" : "faint"}">${r.errored || "—"}</td>
+      <td>${bar(r.score, i === 0 && r.comparable ? "hi" : "")}</td><td class="num mono sm">${f2(t.pass_at_k)}</td><td class="num mono sm">${f2(t.pass_pow_k)}</td>
+      <td>${r.comparable ? `<span class="pill on" style="font-size:12px">Compared${i === 0 ? " · latest" : ""}</span>` : `<span class="pill dim" style="font-size:12px" title="different eval version or model than the latest run, or run on uncommitted changes">Not compared</span>`}</td></tr>`; }).join("")}</tbody></table></div></section>`;
+  return h;
+}
+function tasksSection(s) {
+  if (!s.tasks.length) return "";
+  const runs = (s.summary && s.summary.runs) || [];
+  return `<section><h2>Tasks</h2><p class="note">What the eval asks the agent to do, and the checks its grader scores, from the latest run that ran the task.</p><div class="tasks">${s.tasks.map(t => {
+    const r = runs.slice().reverse().find(r => r.tasks.some(x => x.task === t.name)), rt = r && r.tasks.find(x => x.task === t.name);
+    const tl = r ? tally(taskFiles(s, r.id, t.name).flatMap(([, ts]) => ts.filter(x => !x.errored))) : {};
+    return `<a class="task" href="#/s/${enc(s.name)}/k/${enc(t.name)}"><div class="top"><b>${esc(t.name)}</b><span>${f2(rt && rt.pass_rate)}</span></div>
+      <q>${esc(t.instruction.trim())}</q><div class="checks">${Object.entries(tl).map(([c, o]) => ckChip(c, o.k, o.n, o.evidence)).join("") || `<span class="faint" style="font-size:13px">Not run yet</span>`}</div></a>`; }).join("")}</div></section>`;
+}
+const skillMd = s => `<details class="solo"><summary>SKILL.md</summary><pre>${esc(s.skill_md)}</pre></details>`;
 
-    // ─── Detail View ───────────────────────────────────────────
-    async function loadDetail(file) {
-      $('content').innerHTML = '<div class="spinner">Loading…</div>';
-      const res = await fetch('/api/report?file=' + encodeURIComponent(file));
-      const report = await res.json();
-      renderDetail(report, file);
-    }
+// ---------- run ----------
+function runPage(s, runId) {
+  const runs = s.summary.runs, i = runs.findIndex(r => r.id === runId), r = runs[i], prev = runs[i - 1];
+  if (!r) return `<p class="err">No run ${esc(runId)}.</p>`;
+  const p = r.prov, files = s.trials[runId] || {}, all = Object.values(files).flat(), valid = all.filter(t => !t.errored);
+  const ck = valid.flatMap(t => t.checks), latest = i === runs.length - 1;
+  let h = `${page("Run", esc(runId), "id mono")}<div class="pills" style="margin-top:16px;align-items:center">
+      ${r.comparable ? `<span class="pill on" style="font-size:12px">Compared${latest ? " · latest run" : ""}</span>` : `<span class="pill dim" style="font-size:12px">Not compared: ${(p.dirty || []).length ? "run on uncommitted changes" : "different eval version or model than the latest run"}</span>`}
+      <span class="muted" style="font-size:14px">${esc(when(runId))} · commit <span class="mono">${short(p.commit)}</span> · <span class="mono">${esc(p.model || "agent default")}</span></span></div>
+    <div class="stats">${stat("Score", f2(r.score), "Mean trial reward", true)}
+      ${stat("Trials", r.trials, `${r.tasks.length} task${r.tasks.length === 1 ? "" : "s"} · ${r.errored ? `<span class="err">${r.errored} errored</span>` : "0 errored"}`)}
+      ${stat("Checks passed", `${ck.filter(c => c.ok).length}<small>/${ck.length}</small>`, "Across all valid trials")}
+      ${stat("Agent time", esc(ms(sum(all, t => t.duration_ms))), `<span class="mono">${esc((p.args || []).join(" ") || "—")}</span>`)}</div>
+    <section><h2>Metrics by task</h2><p class="note">pass@k: at least one of k trials passed. pass^k: all k trials passed. Pick a trial number to open what the agent did.</p>
+    <div class="tbl"><table style="min-width:900px"><thead><tr><th>Task</th><th>Pass rate</th><th class="num">pass@k</th><th class="num">pass^k</th><th>Checks</th><th class="num">Mean time</th><th>Trials</th></tr></thead><tbody>
+    ${r.tasks.map(t => { const ts = files[t.file] || [], ok = ts.filter(x => !x.errored), tl = tally(ok);
+      return `<tr><td><a class="mono sm" href="#/s/${enc(s.name)}/k/${enc(t.task)}">${esc(t.task)}</a></td><td>${bar(t.pass_rate, "w")}</td>
+        <td class="num mono sm">${f2(t.pass_at_k)}</td><td class="num mono sm">${f2(t.pass_pow_k)}</td>
+        <td><div class="checks">${Object.entries(tl).map(([c, o]) => ckChip(c, o.k, o.n, o.evidence)).join("")}</div></td>
+        <td class="num mono sm muted">${ok.length ? esc(ms(sum(ok, x => x.duration_ms) / ok.length)) : "—"}</td>
+        <td><div class="tns">${ts.map(x => `<a class="tn ${x.errored ? "errd" : x.reward < 1 ? "no" : ""}" href="#/s/${enc(s.name)}/r/${enc(runId)}/t/${enc(t.file)}/${enc(x.trial_id)}" aria-label="Trial ${esc(x.trial_id)}, reward ${f2(x.reward)}${x.errored ? ", errored" : ""}" title="reward ${f2(x.reward)}${x.errored ? " · errored, excluded" : ""}">#${esc(x.trial_id)}</a>`).join("")}</div></td></tr>`; }).join("")}</tbody></table></div></section>`;
+  const diff = (a, b) => prev && a !== b ? "diff" : "";
+  h += `<div class="cols"><div class="box"><h3>Provenance</h3><dl>
+      <dt>Commit</dt><dd class="mono">${esc(p.commit)}</dd>
+      <dt>Skill version</dt><dd class="mono ${diff(prev && prev.skill_version, r.skill_version)}">${esc(r.skill_version)}${p.skill_commit ? "" : ` <span class="faint">(no git commit recorded)</span>`}</dd>
+      <dt>Eval version</dt><dd class="mono ${diff(prev && prev.eval_version, r.eval_version)}">${esc(p.eval_commit || "—")}</dd>
+      <dt>Agent</dt><dd class="mono">${esc(p.agent || "—")}</dd><dt>Model</dt><dd class="mono">${esc(p.model || "agent default")}</dd>${p.eval_dir ? `<dt>Eval dir</dt><dd class="mono">${esc(p.eval_dir)}</dd>` : ""}<dt>Args</dt><dd class="mono">${esc((p.args || []).join(" ") || "—")}</dd>
+      ${p.dirty ? `<dt>Uncommitted</dt><dd class="mono">${p.dirty.length ? p.dirty.map(esc).join("<br>") : `<span class="muted">None</span>`}</dd>` : ""}</dl></div>`;
+  return h + `</div>`;
+}
 
-    function renderDetail(r, file) {
-      const avgDur = r.trials.reduce((s, t) => s + (t.duration_ms || 0), 0) / r.trials.length;
-      const totalTokens = r.trials.reduce((s, t) => s + (t.input_tokens || 0) + (t.output_tokens || 0), 0);
+// ---------- trial ----------
+function trialPage(s, runId, file, tid) {
+  const t = ((s.trials[runId] || {})[file] || []).find(t => String(t.trial_id) === tid);
+  if (!t) return `<p class="err">No trial ${esc(tid)} in ${esc(runId)}.</p>`;
+  const task = (s.summary.runs.find(r => r.id === runId)?.tasks || []).find(x => x.file === file);
+  const ok = t.checks.filter(c => c.ok).length, changed = Object.entries(t.changed);
+  return `<section class="head" style="margin-top:0"><div><p class="eyebrow">Trial #${esc(t.trial_id)} · <span class="mono" style="text-transform:none;letter-spacing:0">${esc(task ? task.task : file)}</span></p>
+      <h1 class="big">${t.errored ? "The agent never got to work." : ok === t.checks.length ? "Every check passed." : ok === 0 ? "No check passed." : `${ok} of ${t.checks.length} checks passed.`}</h1>
+      <p class="muted" style="margin:16px 0 0;font-size:14px">${t.started ? `Started ${esc(t.started.replace("T", " ").replace(/\.\d+Z$/, "Z"))} · ` : ""}${esc(ms(t.duration_ms))} · <a href="/raw/${enc(s.name)}/${enc(file)}" style="text-decoration:underline">raw json</a></p></div>
+    <div style="display:flex;gap:40px"><div><div class="muted" style="font-size:13px">Reward</div><div style="font-size:64px;font-weight:300;line-height:1;letter-spacing:-.04em;margin-top:8px;${t.reward < 1 ? "color:var(--bad)" : ""}">${f2(t.reward)}</div></div>
+      <div><div class="muted" style="font-size:13px">Checks</div><div style="font-size:64px;font-weight:300;line-height:1;letter-spacing:-.04em;margin-top:8px">${ok}<small style="font-size:32px;color:var(--faint)">/${t.checks.length}</small></div></div></div></section>
+    ${t.errored ? `<div class="banner">Errored: excluded from every score.</div>` : ""}
+    <section style="margin-top:48px"><h3>Checks</h3><div class="list">${t.checks.map(c => `<div class="chk">${c.ok ? tick : cross}<span class="mono" style="font-size:14px;font-weight:500">${esc(c.check)}</span><span class="mono" style="font-size:13px;color:var(--soft);word-break:break-word">${esc(c.evidence) || `<span class="faint">no evidence recorded</span>`}</span></div>`).join("")}</div></section>
+    <section style="margin-top:48px"><h3>Agent’s final output</h3><pre class="out">${esc(t.output) || `<span class="faint">none</span>`}</pre></section>
+    <div class="cols" style="margin-top:48px"><div><h3>Files changed <span class="faint" style="font-weight:300">${changed.length}</span></h3>
+      ${changed.length ? `<div class="list">${changed.map(([p, c]) => `<details><summary><span class="mono">${esc(p)}</span></summary><pre>${esc(c)}</pre></details>`).join("")}</div>` : `<p class="muted">None</p>`}</div>
+    <div><h3>Commands <span class="faint" style="font-weight:300">${t.commands.length}</span></h3>
+      ${t.commands.length ? `<div class="list">${t.commands.map(c => `<details><summary><span class="mono">$ ${esc(c.command.slice(0, 140))}</span><span class="mono ${c.exitCode == 0 ? "faint" : "err"}" style="font-size:12px;white-space:nowrap">exit ${esc(c.exitCode)}</span></summary>
+        <pre>${esc(c.command)}</pre>${c.stdout ? `<div class="faint" style="margin-top:12px;font-size:12px">stdout</div><pre>${esc(c.stdout)}</pre>` : ""}${c.stderr ? `<div class="err" style="margin-top:12px;font-size:12px">stderr</div><pre>${esc(c.stderr)}</pre>` : ""}</details>`).join("")}</div>` : `<p class="muted">None</p>`}</div></div>`;
+}
 
-      const stats = `
-    <div class="stat-pill"><div class="val">${(r.pass_rate * 100).toFixed(1)}%</div><div class="lbl">Pass Rate</div></div>
-    <div class="stat-pill"><div class="val">${r.pass_at_k != null ? (r.pass_at_k * 100).toFixed(1) + '%' : '—'}</div><div class="lbl">pass@k</div></div>
-    <div class="stat-pill"><div class="val">${r.pass_pow_k != null ? (r.pass_pow_k * 100).toFixed(1) + '%' : '—'}</div><div class="lbl">pass^k</div></div>
-    <div class="stat-pill"><div class="val">${(avgDur / 1000).toFixed(1)}s</div><div class="lbl">Avg Duration</div></div>
-    <div class="stat-pill"><div class="val">~${totalTokens}</div><div class="lbl">Total Tokens</div></div>
-    <div class="stat-pill"><div class="val">${r.skills_used?.join(', ') || 'none'}</div><div class="lbl">Skills</div></div>
-  `;
+// ---------- task ----------
+function taskPage(s, name) {
+  const t = s.tasks.find(t => t.name === name);
+  if (!t) return `<p class="err">No task ${esc(name)} in ${esc(s.name)}.</p>`;
+  const runs = ((s.summary && s.summary.runs) || []).filter(r => r.tasks.some(x => x.task === name));
+  const rows = runs.map(r => ({r, t: r.tasks.find(x => x.task === name), trials: taskFiles(s, r.id, name).flatMap(([, ts]) => ts)}));
+  const last = rows.at(-1), compared = rows.filter(x => x.r.comparable).flatMap(x => x.trials.filter(y => !y.errored));
+  const meta = Object.entries(t.metadata || {}).filter(([k]) => k !== "skill");
+  let h = `<section class="hero" style="margin-top:0;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)"><div>${page(`Task${meta.length ? " · " + esc(meta.map(([k, v]) => `${k} ${v}`).join(" · ")) : ""}`, esc(t.name), "id mono")}<blockquote>${esc(t.instruction.trim())}</blockquote></div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
+      <div><div class="muted" style="font-size:13px">Latest pass rate</div><div style="font-size:48px;font-weight:300;letter-spacing:-.04em;margin-top:6px;${last && last.t.pass_rate < 1 ? "color:var(--bad)" : ""}">${f2(last && last.t.pass_rate)}</div></div>
+      <div><div class="muted" style="font-size:13px">Runs</div><div style="font-size:48px;font-weight:300;letter-spacing:-.04em;margin-top:6px">${runs.length}</div></div>
+      <div><div class="muted" style="font-size:13px">Trials</div><div style="font-size:48px;font-weight:300;letter-spacing:-.04em;margin-top:6px">${sum(rows, x => x.trials.length)}</div></div></div></section>
+    <div class="panel" style="margin-top:48px"><h2>Score over time</h2><p class="note">This task only, across the skill’s commits, from runs compared with the latest. Hollow rings: the skill changed but this task wasn’t evaluated there.</p>
+      ${commitChart(s.history || [], [{name, color: "var(--fg)", get: taskOf(name)}], 260)}</div>`;
+  if (rows.length) h += `<section><h2>Runs of this task</h2><div class="tbl"><table style="min-width:820px"><thead><tr><th>Run</th><th>Commit</th><th class="num">Trials</th><th>Pass rate</th><th class="num">pass@k</th><th class="num">pass^k</th><th>Trials</th><th>Status</th></tr></thead><tbody>
+    ${rows.slice().reverse().map(({r, t: rt, trials}, i) => `<tr><td><a class="mono sm" href="#/s/${enc(s.name)}/r/${enc(r.id)}">${esc(when(r.id))}</a></td><td class="mono muted">${short(r.prov.commit)}</td>
+      <td class="num">${trials.length}</td><td>${bar(rt.pass_rate, "w")}</td><td class="num mono sm">${f2(rt.pass_at_k)}</td><td class="num mono sm">${f2(rt.pass_pow_k)}</td>
+      <td><div class="tns">${trials.map(x => `<a class="tn ${x.errored ? "errd" : x.reward < 1 ? "no" : ""}" href="#/s/${enc(s.name)}/r/${enc(r.id)}/t/${enc(rt.file)}/${enc(x.trial_id)}" aria-label="Trial ${esc(x.trial_id)}">#${esc(x.trial_id)}</a>`).join("")}</div></td>
+      <td>${r.comparable ? `<span class="pill on" style="font-size:12px">Compared${i === 0 ? " · latest" : ""}</span>` : `<span class="pill dim" style="font-size:12px">Not compared</span>`}</td></tr>`).join("")}</tbody></table></div></section>`;
+  const tl = tally(compared);
+  h += `<div class="cols"><div class="box"><h3>Checks</h3><p class="muted" style="margin:6px 0 0;font-size:13px">Pass rate over ${compared.length} trial${compared.length === 1 ? "" : "s"} on compared runs, with Wilson ~95% interval</p>
+      ${Object.entries(tl).map(([c, o]) => { const [lo, hi] = wilson(o.k, o.n), r = o.k / o.n;
+        return `<div style="padding:14px 0;border-top:1px solid rgba(var(--fg-rgb),.08);margin-top:14px"><div style="display:flex;justify-content:space-between;gap:12px;font-size:14px"><span class="mono">${esc(c)}</span><span class="mono muted">${o.k}/${o.n} · ${pct(lo)}–${pct(hi)}</span></div>
+          <div class="ci" style="width:100%;margin-top:10px"><div class="track"><div class="band" style="left:${lo * 100}%;width:${(hi - lo) * 100}%"></div><div class="mark" style="left:calc(${r * 100}% - 1px);${r < .5 ? "background:var(--bad)" : ""}"></div></div></div></div>`; }).join("") || `<p class="muted">No compared trials yet.</p>`}</div>
+    <div class="box"><h3>Grader${t.graders.length === 1 ? "" : "s"}</h3>${t.graders.map(graderBlock(t)).join("")}
+      ${t.solution ? `<div class="muted" style="margin-top:16px;font-size:13px">Solution: <span class="mono">${esc(t.solution)}</span></div>` : ""}</div></div>`;
+  return h;
+}
 
-      const trials = r.trials.map((t, i) => renderTrial(t, i)).join('');
-
-      $('content').innerHTML = `
-    <a class="back-link" href="javascript:void(0)" onclick="navigate('list')">← All Reports</a>
-    <div class="detail-header">
-      <h2>${esc(r.task)}</h2>
-      <div class="detail-stats">${stats}</div>
-    </div>
-    ${trials}
-  `;
-    }
-
-    function renderTrial(t, idx) {
-      const pass = t.reward >= 0.5;
-      const dur = ((t.duration_ms || 0) / 1000).toFixed(1);
-      const tokens = (t.input_tokens || 0) + (t.output_tokens || 0);
-
-      const graders = (t.grader_results || []).map(g => `
-    <div class="grader-row">
-      <span class="badge badge-type">${esc(g.grader_type)}</span>
-      <span class="grader-score ${g.score >= 0.5 ? 'pass' : 'fail'}">${g.score.toFixed(2)}</span>
-      <span class="grader-weight">×${g.weight}</span>
-      <div class="grader-details">${esc(g.details)}</div>
-    </div>
-  `).join('');
-
-      const logId = 'log-' + idx;
-      const logs = (t.session_log || []).map(e => renderLogEntry(e)).join('');
-
-      return `
-    <div class="trial-card" id="trial-${idx}">
-      <div class="trial-header" onclick="toggleTrial(${idx})">
-        <span class="trial-number">Trial ${t.trial_id}</span>
-        <span class="trial-reward ${pass ? 'pass' : 'fail'}">${t.reward.toFixed(2)}</span>
-        <span class="badge ${pass ? 'badge-pass' : 'badge-fail'}">${pass ? 'PASS' : 'FAIL'}</span>
-        <span class="trial-meta">
-          <span>${dur}s</span>
-          <span>${t.n_commands || 0} cmds</span>
-          <span>~${tokens} tokens</span>
-        </span>
-        <span class="trial-chevron">▶</span>
-      </div>
-      <div class="trial-body">
-        ${graders ? '<div class="graders-section">' + graders + '</div>' : ''}
-        <div class="log-section">
-          <button class="log-toggle" onclick="toggleLog('${logId}')">▶ Session Log (${t.session_log?.length || 0} entries)</button>
-          <div class="log-entries" id="${logId}">${logs}</div>
-        </div>
-      </div>
-    </div>
-  `;
-    }
-
-    function renderLogEntry(e) {
-      let body = '';
-      switch (e.type) {
-        case 'agent_start':
-          body = '<pre class="code-block">' + esc(e.instruction || '') + '</pre>';
-          break;
-        case 'command':
-          body = '<div class="cmd-line">' + esc(e.command || '') + '</div>'
-            + '<pre class="code-block">' + esc(e.stdout || '')
-            + (e.stderr ? '<span class="stderr-text">' + esc(e.stderr) + '</span>' : '')
-            + '</pre>'
-            + '<div class="exit-badge ' + (e.exitCode === 0 ? 'ok' : 'err') + '">exit ' + (e.exitCode ?? '?') + '</div>';
-          break;
-        case 'agent_result':
-          body = '<pre class="code-block">' + esc(e.output || '') + '</pre>';
-          break;
-        case 'grader':
-          if (e.grader_result) {
-            const g = e.grader_result;
-            body = '<span class="grader-score ' + (g.score >= 0.5 ? 'pass' : 'fail') + '">'
-              + g.score.toFixed(2) + '</span> '
-              + '<span class="badge badge-type">' + esc(g.grader_type) + '</span> '
-              + '<span class="grader-details">' + esc(g.details) + '</span>';
-          }
-          break;
-        case 'reward':
-          body = '<span class="reward-val ' + ((e.value || 0) >= 0.5 ? 'pass' : 'fail') + '">'
-            + (e.value?.toFixed(2) || '0.00') + '</span>'
-            + (e.output ? '<div class="grader-details" style="margin-top:0.25rem">' + esc(e.output) + '</div>' : '');
-          break;
-      }
-      return '<div class="log-entry ' + e.type + '">'
-        + '<span class="log-label">' + e.type + '</span>'
-        + '<span class="log-ts">' + (e.timestamp || '') + '</span>'
-        + '<div class="log-content">' + body + '</div>'
-        + '</div>';
-    }
-
-    // ─── Interactions ──────────────────────────────────────────
-    function toggleTrial(idx) {
-      document.getElementById('trial-' + idx).classList.toggle('open');
-    }
-    function toggleLog(id) {
-      document.getElementById(id).classList.toggle('open');
-    }
-
-    // ─── Init ──────────────────────────────────────────────────
-    navigate('list');
-  </script>
+// A deterministic grader is a script; an llm_rubric is a judge prompt: skillgrade sends its rubric under
+// "## Rubric" and the task's `expected:` under "## Expected Output" (only the judge sees it), then the transcript.
+const graderBlock = t => g => {
+  const share = sum(t.graders, x => +x.weight || 1), w = +g.weight || 1;
+  const head = `<div class="mono" style="margin-top:20px;font-size:13px;color:var(--soft);word-break:break-all">${esc(g.type)} · weight ${esc(g.weight)} <span class="faint">(${Math.round(w / share * 100)}% of the reward)</span>`;
+  const block = (label, body, note) => `<details class="solo" style="margin-top:12px;padding:14px 18px"><summary style="font-size:14px"><span>${label}</span>${note ? `<span class="faint" style="font-weight:400;font-size:12px">${note}</span>` : ""}</summary><pre>${esc(body)}</pre></details>`;
+  if (g.type !== "llm_rubric") return `${head} · ${esc(g.run.split("\n")[0].replace(/^# /, ""))}</div>${block("Source", g.run)}`;
+  return `${head}${g.provider || g.model ? ` · judge ${esc([g.provider, g.model].filter(Boolean).join(" / "))}` : ""}</div>
+    ${block("Rubric", g.rubric, "## Rubric")}
+    ${t.expected != null ? block("Expected Output", t.expected, "## Expected Output · judge only") : `<p class="muted" style="font-size:13px;margin:12px 0 0">No <span class="mono">expected:</span> on this task: the judge gets the rubric and the transcript only.</p>`}`;
+};
+// ---------- routing ----------
+let manifest;
+async function route() {
+  const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  try { manifest = await (await fetch("/api/manifest.json")).json(); }
+  catch (e) { $("#app").innerHTML = `<div class="banner">Could not load the manifest: ${esc(e)}. Is <span class="mono">skillgrade preview browser</span> running?</div>`; return; }
+  const m = manifest, s = parts[0] === "s" && m.skills.find(x => x.name === parts[1]);
+  const crumbs = [`<a href="#/">Skills</a>`];
+  let html;
+  if (!s) html = home(m);
+  else {
+    const base = `#/s/${enc(s.name)}`;
+    crumbs.push(`<a href="${base}">${esc(s.name)}</a>`);
+    if (parts[2] === "r" && s.summary) {
+      crumbs.push(`<a href="${base}/r/${enc(parts[3])}">Run ${esc(when(parts[3]))}</a>`);
+      if (parts[4] === "t") { crumbs.push(`<span>Trial #${esc(parts[6])}</span>`); html = trialPage(s, parts[3], parts[5], parts[6]); }
+      else html = runPage(s, parts[3]);
+    } else if (parts[2] === "k") { crumbs.push(`<span>${esc(parts[3])}</span>`); html = taskPage(s, parts[3]); }
+    else html = skillPage(s);
+  }
+  if (crumbs.length > 1) crumbs[crumbs.length - 1] = crumbs.at(-1).replace(/^<a [^>]*>(.*)<\/a>$/, "<span>$1</span>");
+  $("#crumbs").innerHTML = s ? crumbs.join("<span>/</span>") : "";
+  $("#app").innerHTML = html;
+  scrollTo(0, 0);
+}
+// landing page filter and search re-render the cards only, so the input keeps focus
+document.addEventListener("click", e => {
+  const hb = e.target.closest("[data-harm], [data-mode]");  // skill page: harmonize on/off, or pick its mode (turns it on)
+  if (hb) {
+    if (hb.dataset.mode) { S.mode = hb.dataset.mode; S.harm = true; } else S.harm = !S.harm;
+    const y = scrollY;
+    return route().then(() => scrollTo(0, y));
+  }
+  const menu = $(".sortmenu[open]");
+  if (menu && !menu.contains(e.target)) menu.open = false;  // click outside closes the sort menu
+  const so = e.target.closest("[data-sort], [data-rev]");
+  if (so) {
+    if (so.dataset.sort) { S.rev = S.sort === so.dataset.sort && S.rev; S.sort = so.dataset.sort; } else S.rev = so.dataset.rev === "true";
+    $("#sort").innerHTML = sortCtl();
+    $("#sortlabel").textContent = SORTS[S.sort].label;
+    return $("#cards").innerHTML = cards(manifest);
+  }
+  const b = e.target.closest("[data-filter]");
+  if (!b) return;
+  S.filter = b.dataset.filter;
+  document.querySelectorAll("[data-filter]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("#cards").innerHTML = cards(manifest);
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") $(".sortmenu[open]")?.removeAttribute("open"); });
+document.addEventListener("input", e => { if (e.target.id === "q") { S.query = e.target.value; $("#cards").innerHTML = cards(manifest); } });
+addEventListener("hashchange", route);
+route();
+</script>
 </body>
-
 </html>

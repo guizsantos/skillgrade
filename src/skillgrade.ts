@@ -6,7 +6,7 @@
  * Usage:
  *   skillgrade                     Run all eval tasks from eval.yaml
  *   skillgrade init                Generate eval.yaml from detected skills
- *   skillgrade preview [browser]   View results (CLI default, or browser)
+ *   skillgrade preview [browser]   View results (CLI default, or every skill in the browser)
  *   skillgrade <task-name>         Run a specific eval
  *
  * Options:
@@ -58,7 +58,8 @@ async function main() {
     if (command === 'preview') {
         const mode = args[1] === 'browser' ? 'browser' : 'cli';
         const outputDir = getFlag('output') || path.join(os.tmpdir(), 'skillgrade');
-        await runPreview(cwd, mode, outputDir);
+        const port = getFlag('port') ? parseInt(getFlag('port')!) : undefined;
+        await runPreview(cwd, mode, outputDir, port);
         return;
     }
 
@@ -134,7 +135,10 @@ function printHelp() {
   Usage:
     skillgrade                     Run all evals from eval.yaml
     skillgrade init [--force]      Generate eval.yaml (--force to overwrite)
-    skillgrade preview [browser]   View results (CLI default, or browser)
+    skillgrade preview             View this skill's latest results in the terminal
+    skillgrade preview browser [--port=3847]
+                                   Browse every skill's results under --output:
+                                   scores, Δ vs the previous skill version, runs, trials
     skillgrade <eval-name>         Run a specific eval
 
   Presets:
@@ -184,7 +188,7 @@ function printHelp() {
     skillgrade --regression --ci   # CI regression with 30 trials
     skillgrade --agent=acp --acp-command="gemini --acp"  # use ACP-compatible agent
     skillgrade --agent=claude --model=opus         # compare models on one suite
-    skillgrade preview browser     # open web UI
+    skillgrade preview browser     # browse every skill's results at http://localhost:3847
 `);
 }
 

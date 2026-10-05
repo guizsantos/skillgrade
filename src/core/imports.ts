@@ -205,3 +205,16 @@ function tag<T extends object>(node: T, file: string): T {
     Object.defineProperty(node, SOURCE_KEY, { value: file, enumerable: false, configurable: true });
     return node;
 }
+
+/** Every YAML file a config is built from: the file itself and all it (transitively) imports. */
+export async function importedFiles(file: string): Promise<string[]> {
+    const files = new Set<string>([path.resolve(file)]);
+    const walk = (node: unknown) => {
+        if (!node || typeof node !== 'object') return;
+        const src = sourceFileOf(node);
+        if (src) files.add(src);
+        Object.values(node).forEach(walk);
+    };
+    walk(await loadYamlWithImports(file));
+    return [...files];
+}

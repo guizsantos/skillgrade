@@ -38,10 +38,36 @@ The agent is auto-detected from your API key: `GEMINI_API_KEY` → Gemini, `ANTH
 
 ```bash
 skillgrade preview          # CLI report
-skillgrade preview browser  # web UI → http://localhost:3847
+skillgrade preview browser  # every skill's results → http://localhost:3847
 ```
 
 Reports are saved to `$TMPDIR/skillgrade/<skill-name>/results/`. Override with `--output=DIR`.
+
+## Browsing results
+
+`skillgrade preview browser [--port=3847] [--output=DIR]` serves a local site over every skill under the output directory. It re-reads the results on each page load, so a run that just finished appears when you reload. It shows:
+
+- Each skill's current score ± 95% interval, and **Δ** against the previous skill version, with a verdict: better, worse, or within noise (two standard errors; needs ≥2 trials a side).
+- The score of every commit that touched the skill, overall and per task.
+- Per-check pass rates with Wilson intervals, by version.
+- How many more trials would resolve the Δ.
+- A **Harmonize** toggle for when tasks have unequal trial counts. It scores the same number of trials from every task: the worst ones (pessimistic) or the best ones (optimistic).
+- Each run, task and trial, down to the check evidence, the agent's output, its commands, and the grader source.
+
+**Versions are commits.** Every report records a `provenance` block:
+
+- `run_id`, which groups the reports of one invocation.
+- `commit` (HEAD).
+- `skill_commit`: the last commit that touched the skill.
+- `eval_commit`: the last commit that touched the eval dir or a file `eval.yaml` imports.
+- `dirty`: uncommitted changes to those, or to the files tasks copy in.
+- `agent`, `model`, `args`, and the eval and skill paths.
+
+Runs are compared only when their `eval_commit` and model match the latest run's. Anything else measures a different test, not a different skill.
+
+Runs made on uncommitted changes are listed but never compared, because no commit describes what they evaluated. Commit your skill change before a run you want counted.
+
+Reports from before provenance existed still show: each file is a run of its own.
 
 ## Presets
 

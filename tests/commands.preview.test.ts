@@ -39,6 +39,12 @@ describe('runPreview', () => {
     expect(mockRunCliPreview).not.toHaveBeenCalled();
   });
 
+  it('serves every skill under the output dir in the browser', async () => {
+    await runPreview('/project', 'browser', '/custom/output', 4000);
+
+    expect(mockRunBrowserPreview).toHaveBeenCalledWith('/custom/output', 4000);
+  });
+
   it('constructs results dir from output dir', async () => {
     await runPreview('/project', 'cli', '/custom/output');
 

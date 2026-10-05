@@ -5,6 +5,7 @@ import {
     LogEntry, TrialResult, EvalReport, GraderResult, AgentResult
 } from './types';
 import { ResolvedGrader } from './core/config.types';
+import { Provenance } from './core/provenance';
 import { getGrader } from './graders';
 import { fmt, Spinner } from './utils/cli';
 
@@ -78,10 +79,12 @@ export interface EvalRunOptions {
 export class EvalRunner {
     private provider: EnvironmentProvider;
     private logDir?: string;
+    private provenance?: Provenance;
 
-    constructor(provider: EnvironmentProvider, logDir?: string) {
+    constructor(provider: EnvironmentProvider, logDir?: string, provenance?: Provenance) {
         this.provider = provider;
         this.logDir = logDir;
+        this.provenance = provenance;
     }
 
     private timestamp(): string {
@@ -139,7 +142,8 @@ export class EvalRunner {
             pass_at_k: calculatePassAtK(numTrials, successes, numTrials),
             pass_pow_k: calculatePassPowK(numTrials, successes, numTrials),
             trials,
-            skills_used: skillsPaths.map(p => path.basename(p))
+            skills_used: skillsPaths.map(p => path.basename(p)),
+            ...(this.provenance ? { provenance: this.provenance } : {}),
         };
 
         if (this.logDir) {
