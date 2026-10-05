@@ -13,6 +13,7 @@
  *   --trials=N         Override trial count
  *   --parallel=N       Run trials concurrently
  *   --validate         Run reference solutions to verify graders
+ *   --from-head        Evaluate HEAD, leaving uncommitted changes out
  *   --ci               CI mode: exit non-zero if below threshold
  *   --threshold=0.8    Pass rate threshold for --ci
  *   --preview          Open results after running
@@ -121,6 +122,7 @@ async function main() {
         command: getFlag('command'),
         openCodeAgent: getFlag('opencode-agent'),
         openCodeModel: getFlag('opencode-model'),
+        fromHead: hasFlag('from-head'),
     });
 
     if (openPreview) {
@@ -170,6 +172,10 @@ function printHelp() {
     --output=DIR       Output directory for reports and temp files
                        Default: $TMPDIR/skillgrade
     --validate         Verify graders using reference solutions
+    --from-head        A run evaluates a commit, so uncommitted changes to its
+                       inputs (skill, eval dir, imported YAML, workspace files)
+                       stop it. This evaluates HEAD from a temporary git
+                       worktree instead, leaving them out (not with --validate)
     --ci               CI mode: exit non-zero if below threshold
     --threshold=0.8    Pass rate threshold for CI mode
     --preview          Open CLI results after running
@@ -188,6 +194,7 @@ function printHelp() {
     skillgrade --regression --ci   # CI regression with 30 trials
     skillgrade --agent=acp --acp-command="gemini --acp"  # use ACP-compatible agent
     skillgrade --agent=claude --model=opus         # compare models on one suite
+    skillgrade --smoke --from-head # evaluate HEAD while you keep editing the skill
     skillgrade preview browser     # browse every skill's results at http://localhost:3847
 `);
 }
