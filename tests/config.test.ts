@@ -99,7 +99,7 @@ tasks:
     const yaml = `version: "1"
 skill: ./SKILL.md
 defaults:
-  agent: claude
+  harness: claude-code
   trials: 10
   docker:
     base: ubuntu:22.04
@@ -119,7 +119,7 @@ tasks:
     const config = await loadEvalConfig('/test');
     expect(config.version).toBe('1');
     expect(config.skill).toBe('./SKILL.md');
-    expect(config.defaults.agent).toBe('claude');
+    expect(config.defaults.harness).toBe('claude-code');
     expect(config.defaults.trials).toBe(10);
     expect(config.defaults.docker.base).toBe('ubuntu:22.04');
     expect(config.tasks).toHaveLength(1);
@@ -142,8 +142,8 @@ tasks:
     mockReadFile.mockResolvedValue(yaml as any);
 
     const config = await loadEvalConfig('/test');
-    expect(config.defaults.agent).toBe('gemini');
-    expect(config.defaults.provider).toBe('docker');
+    expect(config.defaults.harness).toBe('gemini-cli');
+    expect(config.defaults.runtime).toBe('docker');
     expect(config.defaults.trials).toBe(5);
     expect(config.defaults.timeout).toBe(300);
     expect(config.defaults.threshold).toBe(0.8);
@@ -208,11 +208,11 @@ tasks:
     expect(config.tasks[0].graders[0].weight).toBe(1.0);
   });
 
-  it('parses grader_provider from defaults', async () => {
+  it('parses llm_provider from defaults', async () => {
     mockPathExists.mockResolvedValue(true as any);
     const yaml = `version: "1"
 defaults:
-  grader_provider: anthropic
+  llm_provider: anthropic
 tasks:
   - name: test-task
     instruction: do it
@@ -223,14 +223,14 @@ tasks:
     mockReadFile.mockResolvedValue(yaml as any);
 
     const config = await loadEvalConfig('/test');
-    expect(config.defaults.grader_provider).toBe('anthropic');
+    expect(config.defaults.llm_provider).toBe('anthropic');
   });
 
-  it('rejects invalid grader_provider value', async () => {
+  it('rejects invalid llm_provider value', async () => {
     mockPathExists.mockResolvedValue(true as any);
     const yaml = `version: "1"
 defaults:
-  grader_provider: invalid_provider
+  llm_provider: invalid_provider
 tasks:
   - name: test-task
     instruction: do it
@@ -240,14 +240,44 @@ tasks:
 `;
     mockReadFile.mockResolvedValue(yaml as any);
 
-    await expect(loadEvalConfig('/test')).rejects.toThrow('grader_provider must be one of');
+    await expect(loadEvalConfig('/test')).rejects.toThrow('llm_provider must be one of');
   });
 
-  it('rejects the command agent when no command is set', async () => {
+  it('loads the keys and harness names from before the rename, with a warning', async () => {
     mockPathExists.mockResolvedValue(true as any);
     const yaml = `version: "1"
 defaults:
-  agent: command
+  agent: claude
+  provider: local
+  grader_provider: anthropic
+  grader_model: claude-haiku
+tasks:
+  - name: test-task
+    instruction: do it
+    agent: gemini
+    graders:
+      - type: llm_rubric
+        rubric: "check quality"
+        provider: jev
+        model: jev-latest
+`;
+    mockReadFile.mockResolvedValue(yaml as any);
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const config = await loadEvalConfig('/test');
+    expect(config.defaults).toMatchObject({ harness: 'claude-code', runtime: 'local', llm_provider: 'anthropic', llm_model: 'claude-haiku' });
+    expect(config.defaults).not.toHaveProperty('agent');
+    expect(config.tasks[0].harness).toBe('gemini-cli');
+    expect(config.tasks[0].graders[0]).toMatchObject({ llm_provider: 'jev', llm_model: 'jev-latest' });
+    expect(warn.mock.calls.flat().join('\n')).toMatch(/"agent" in defaults is deprecated, use "harness"/);
+    warn.mockRestore();
+  });
+
+  it('rejects the command harness when no command is set', async () => {
+    mockPathExists.mockResolvedValue(true as any);
+    const yaml = `version: "1"
+defaults:
+  harness: command
 tasks:
   - name: test-task
     instruction: do it
@@ -260,11 +290,11 @@ tasks:
     await expect(loadEvalConfig('/test')).rejects.toThrow('command');
   });
 
-  it('accepts the command agent with a command in defaults', async () => {
+  it('accepts the command harness with a command in defaults', async () => {
     mockPathExists.mockResolvedValue(true as any);
     const yaml = `version: "1"
 defaults:
-  agent: command
+  harness: command
   command: "node mycli.js"
 tasks:
   - name: test-task
@@ -276,11 +306,11 @@ tasks:
     mockReadFile.mockResolvedValue(yaml as any);
 
     const config = await loadEvalConfig('/test');
-    expect(config.defaults.agent).toBe('command');
+    expect(config.defaults.harness).toBe('command');
     expect(config.defaults.command).toBe('node mycli.js');
   });
 
-  it('rejects invalid provider on individual grader', async () => {
+  it('rejects invalid llm_provider on individual grader', async () => {
     mockPathExists.mockResolvedValue(true as any);
     const yaml = `version: "1"
 tasks:
@@ -289,38 +319,38 @@ tasks:
     graders:
       - type: llm_rubric
         rubric: "check quality"
-        provider: invalid_provider
+        llm_provider: invalid_provider
 `;
     mockReadFile.mockResolvedValue(yaml as any);
 
-    await expect(loadEvalConfig('/test')).rejects.toThrow('grader has invalid provider');
+    await expect(loadEvalConfig('/test')).rejects.toThrow('grader has invalid llm_provider');
   });
 
-  it('rejects invalid grader_provider at task level', async () => {
+  it('rejects invalid llm_provider at task level', async () => {
     mockPathExists.mockResolvedValue(true as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
     instruction: do it
-    grader_provider: bad_provider
+    llm_provider: bad_provider
     graders:
       - type: deterministic
         run: "echo ok"
 `;
     mockReadFile.mockResolvedValue(yaml as any);
 
-    await expect(loadEvalConfig('/test')).rejects.toThrow('has invalid grader_provider');
+    await expect(loadEvalConfig('/test')).rejects.toThrow('has invalid llm_provider');
   });
 
-  it('preserves task-level grader_provider through loadEvalConfig', async () => {
+  it('preserves task-level llm_provider through loadEvalConfig', async () => {
     mockPathExists.mockResolvedValue(true as any);
     const yaml = `version: "1"
 defaults:
-  grader_provider: gemini
+  llm_provider: gemini
 tasks:
   - name: test-task
     instruction: do it
-    grader_provider: anthropic
+    llm_provider: anthropic
     graders:
       - type: llm_rubric
         rubric: "check quality"
@@ -328,18 +358,18 @@ tasks:
     mockReadFile.mockResolvedValue(yaml as any);
 
     const config = await loadEvalConfig('/test');
-    expect(config.tasks[0].grader_provider).toBe('anthropic');
+    expect(config.tasks[0].llm_provider).toBe('anthropic');
   });
 
-  it('preserves task-level grader_model through loadEvalConfig', async () => {
+  it('preserves task-level llm_model through loadEvalConfig', async () => {
     mockPathExists.mockResolvedValue(true as any);
     const yaml = `version: "1"
 defaults:
-  grader_model: gemini-1.5-flash
+  llm_model: gemini-1.5-flash
 tasks:
   - name: test-task
     instruction: do it
-    grader_model: claude-3-5-sonnet
+    llm_model: claude-3-5-sonnet
     graders:
       - type: llm_rubric
         rubric: "check quality"
@@ -347,7 +377,7 @@ tasks:
     mockReadFile.mockResolvedValue(yaml as any);
 
     const config = await loadEvalConfig('/test');
-    expect(config.tasks[0].grader_model).toBe('claude-3-5-sonnet');
+    expect(config.tasks[0].llm_model).toBe('claude-3-5-sonnet');
   });
 
   it('preserves task-level environment through loadEvalConfig', async () => {
@@ -372,8 +402,8 @@ tasks:
 
 describe('resolveTask', () => {
   const defaults: EvalDefaults = {
-    agent: 'gemini',
-    provider: 'docker',
+    harness: 'gemini-cli',
+    runtime: 'docker',
     trials: 5,
     timeout: 300,
     threshold: 0.8,
@@ -392,8 +422,8 @@ describe('resolveTask', () => {
     mockPathExists.mockResolvedValue(false as any);
 
     const resolved = await resolveTask(task, defaults, '/base');
-    expect(resolved.agent).toBe('gemini');
-    expect(resolved.provider).toBe('docker');
+    expect(resolved.harness).toBe('gemini-cli');
+    expect(resolved.runtime).toBe('docker');
     expect(resolved.trials).toBe(5);
     expect(resolved.timeout).toBe(300);
     expect(resolved.docker.base).toBe('node:20-slim');
@@ -423,10 +453,10 @@ describe('resolveTask', () => {
     expect((await resolveTask(overrides, defaultsWithModel, '/base')).model).toBe('claude-opus-5');
   });
 
-  it('resolves grader_provider on the task level', async () => {
+  it('resolves llm_provider on the task level', async () => {
     const defaultsWitProvider: EvalDefaults = {
       ...defaults,
-      grader_provider: 'anthropic',
+      llm_provider: 'anthropic',
     };
     const task: EvalTaskConfig = {
       name: 'test-task',
@@ -435,22 +465,22 @@ describe('resolveTask', () => {
     };
 
     const resolved = await resolveTask(task, defaultsWitProvider, '/base');
-    expect(resolved.grader_provider).toBe('anthropic');
-    expect(resolved.graders[0].provider).toBeUndefined();
+    expect(resolved.llm_provider).toBe('anthropic');
+    expect(resolved.graders[0].llm_provider).toBeUndefined();
   });
 
-  it('grader-level provider is preserved as-is', async () => {
+  it('grader-level llm_provider is preserved as-is', async () => {
     const task: EvalTaskConfig = {
       name: 'test-task',
       instruction: 'multi\nline',
-      graders: [{ type: 'llm_rubric', rubric: 'check quality', weight: 1.0, provider: 'openai' }],
+      graders: [{ type: 'llm_rubric', rubric: 'check quality', weight: 1.0, llm_provider: 'openai' }],
     };
 
     const resolved = await resolveTask(task, defaults, '/base');
-    expect(resolved.graders[0].provider).toBe('openai');
+    expect(resolved.graders[0].llm_provider).toBe('openai');
   });
 
-  it('grader without explicit provider remains undefined', async () => {
+  it('grader without explicit llm_provider remains undefined', async () => {
     const task: EvalTaskConfig = {
       name: 'test-task',
       instruction: 'multi\nline',
@@ -458,32 +488,32 @@ describe('resolveTask', () => {
     };
 
     const resolved = await resolveTask(task, defaults, '/base');
-    expect(resolved.graders[0].provider).toBeUndefined();
+    expect(resolved.graders[0].llm_provider).toBeUndefined();
   });
 
-  it('task-level grader_provider overrides defaults', async () => {
+  it('task-level llm_provider overrides defaults', async () => {
     const defaultsWitProvider: EvalDefaults = {
       ...defaults,
-      grader_provider: 'gemini',
+      llm_provider: 'gemini',
     };
     const task: EvalTaskConfig = {
       name: 'test-task',
       instruction: 'multi\nline',
-      grader_provider: 'openai',
+      llm_provider: 'openai',
       graders: [{ type: 'llm_rubric', rubric: 'check quality', weight: 1.0 }],
     };
 
     const resolved = await resolveTask(task, defaultsWitProvider, '/base');
-    expect(resolved.grader_provider).toBe('openai');
-    expect(resolved.graders[0].provider).toBeUndefined();
+    expect(resolved.llm_provider).toBe('openai');
+    expect(resolved.graders[0].llm_provider).toBeUndefined();
   });
 
   it('task overrides take precedence over defaults', async () => {
     const task: EvalTaskConfig = {
       name: 'test-task',
       instruction: 'do it now',
-      agent: 'claude',
-      provider: 'local',
+      harness: 'claude-code',
+      runtime: 'local',
       trials: 10,
       timeout: 600,
       docker: { base: 'ubuntu:22.04' },
@@ -493,8 +523,8 @@ describe('resolveTask', () => {
     mockPathExists.mockResolvedValue(false as any);
 
     const resolved = await resolveTask(task, defaults, '/base');
-    expect(resolved.agent).toBe('claude');
-    expect(resolved.provider).toBe('local');
+    expect(resolved.harness).toBe('claude-code');
+    expect(resolved.runtime).toBe('local');
     expect(resolved.trials).toBe(10);
     expect(resolved.timeout).toBe(600);
     expect(resolved.docker.base).toBe('ubuntu:22.04');
@@ -592,10 +622,10 @@ describe('resolveTask', () => {
     expect(resolved.graders[0].setup).toBe('npm install -g typescript');
   });
 
-  it('inherits the command from defaults for the command agent', async () => {
+  it('inherits the command from defaults for the command harness', async () => {
     const commandDefaults: EvalDefaults = {
       ...defaults,
-      agent: 'command',
+      harness: 'command',
       command: 'node mycli.js',
     };
     const task: EvalTaskConfig = {
@@ -605,14 +635,14 @@ describe('resolveTask', () => {
     };
 
     const resolved = await resolveTask(task, commandDefaults, '/base');
-    expect(resolved.agent).toBe('command');
+    expect(resolved.harness).toBe('command');
     expect(resolved.command).toBe('node mycli.js');
   });
 
   it('lets a task override the command', async () => {
     const commandDefaults: EvalDefaults = {
       ...defaults,
-      agent: 'command',
+      harness: 'command',
       command: 'node default.js',
     };
     const task: EvalTaskConfig = {

@@ -37,11 +37,11 @@ description: Sets up and runs skillgrade evaluation pipelines for Agent Skills. 
 4. Run multiple evals: `skillgrade --eval=fix-linting,write-tests`.
 5. Run only deterministic graders (skip LLM calls): `skillgrade --grader=deterministic`.
 6. Run only LLM rubric graders: `skillgrade --grader=llm_rubric`.
-7. The agent is auto-detected from the API key. Override with `--agent=gemini|claude|codex|acp|opencode|command`.
+7. The harness (the agent CLI under test) is auto-detected from the API key. Override with `--harness=gemini-cli|claude-code|codex|acp|opencode|command`.
 8. For ACP, pass `--acp-command="gemini --acp"` or set `defaults.acp.command`.
 9. For OpenCode, pass `--opencode-agent=build|plan|explore` or `--opencode-model=provider/model`.
-10. For a custom agent, pass `--agent=command --command="node mycli.js"` or set `defaults.command`. The instruction is piped to the command's stdin.
-11. Override the provider with `--provider=docker|local`.
+10. For a custom agent, pass `--harness=command --command="node mycli.js"` or set `defaults.command`. The instruction is piped to the command's stdin.
+11. Choose where trials run with `--runtime=docker|local`.
 
 **Step 5: Review Results**
 1. Run `skillgrade preview` for a CLI report.
@@ -49,8 +49,8 @@ description: Sets up and runs skillgrade evaluation pipelines for Agent Skills. 
 3. Reports are saved to `$TMPDIR/skillgrade/<skill-name>/results/`. Override with `--output=DIR`.
 
 **Step 6: Integrate with CI**
-1. Add a GitHub Actions step that installs skillgrade, navigates to the skill directory, and runs with `--regression --ci --provider=local`.
-2. Use `--provider=local` in CI — the runner is already an ephemeral sandbox, so Docker adds overhead without benefit.
+1. Add a GitHub Actions step that installs skillgrade, navigates to the skill directory, and runs with `--regression --ci --runtime=local`.
+2. Use `--runtime=local` in CI — the runner is already an ephemeral sandbox, so Docker adds overhead without benefit.
 3. The `--ci` flag causes a non-zero exit code if the pass rate falls below `--threshold` (default: 0.8).
 4. Read `references/ci-example.md` for a complete workflow template.
 

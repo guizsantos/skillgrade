@@ -12,7 +12,7 @@ import { detectSkills } from '../core/skills';
 import { DockerProvider } from '../providers/docker';
 import { LocalProvider } from '../providers/local';
 import { EvalRunner, EvalRunOptions } from '../evalRunner';
-import { createAgent, AgentConfig } from '../agents/registry';
+import { createAgent, AgentConfig, harnessName } from '../agents/registry';
 import { BaseAgent, EvalReport } from '../types';
 import { ResolvedTask } from '../core/config.types';
 import { parseEnvFile } from '../utils/env';
@@ -21,7 +21,7 @@ import { importedFiles } from '../core/imports';
 import { fmt, header, kv, progress, resultsSummary, validationResult } from '../utils/cli';
 
 /** Agents that accept a model on the command line. */
-const MODEL_AWARE_AGENTS = new Set(['gemini', 'claude', 'codex', 'opencode']);
+const MODEL_AWARE_HARNESSES = new Set(['gemini-cli', 'claude-code', 'codex', 'opencode']);
 
 interface RunOptions {
     eval?: string;       // run specific eval(s) by name (comma-separated)
@@ -34,9 +34,9 @@ interface RunOptions {
     ci?: boolean;
     threshold?: number;
     preset?: 'smoke' | 'reliable' | 'regression';
-    agent?: string;      // override agent (gemini|claude|codex|acp|opencode|command)
-    model?: string;      // override the model the agent answers with (gemini, claude, codex, opencode)
-    provider?: string;   // override provider (docker|local)
+    harness?: string;    // override the agent CLI under test (gemini-cli|claude-code|codex|acp|opencode|command)
+    model?: string;      // override the model the harness answers with (gemini-cli, claude-code, codex, opencode)
+    runtime?: string;    // override where trials run (docker|local)
     output?: string;     // output directory for reports and temp files
     grader?: string;     // filter graders by type (deterministic|llm_rubric)
     acpCommand?: string; // ACP agent command (e.g., "gemini --acp")
@@ -174,50 +174,50 @@ export async function runEvals(dir: string, opts: RunOptions) {
                     ? resolved.graders.filter(g => g.type === opts.grader)
                     : resolved.graders,
                 timeoutSec: resolved.timeout,
-                graderModel: resolved.grader_model,
-                graderProvider: resolved.grader_provider,
+                llmModel: resolved.llm_model,
+                llmProvider: resolved.llm_provider,
                 expected: resolved.expected,
                 metadata: resolved.metadata,
                 environment: resolved.environment,
             };
 
-            // Pick agent: CLI flag > task-level override > auto-detect from API key > default
-            let agentName = opts.agent || resolved.agent;
-            if (!opts.agent && !taskDef.agent) {
+            // Pick the harness: CLI flag > task-level override > auto-detect from API key > default
+            let agentName = opts.harness ? harnessName(opts.harness) : resolved.harness;
+            if (!opts.harness && !taskDef.harness) {
                 // No explicit override — auto-detect from available API keys
                 const hasGemini = !!env.GEMINI_API_KEY;
                 const hasAnthropic = !!env.ANTHROPIC_API_KEY;
                 const hasOpenAI = !!env.OPENAI_API_KEY;
                 const keyCount = [hasGemini, hasAnthropic, hasOpenAI].filter(Boolean).length;
                 if (keyCount === 1) {
-                    if (hasAnthropic) agentName = 'claude';
+                    if (hasAnthropic) agentName = 'claude-code';
                     else if (hasOpenAI) agentName = 'codex';
-                    else if (hasGemini) agentName = 'gemini';
+                    else if (hasGemini) agentName = 'gemini-cli';
                 }
             }
-            const providerName = opts.provider || resolved.provider;
-            // CLI flag > task-level override > defaults; undefined means the agent CLI decides
+            const providerName = opts.runtime || resolved.runtime;
+            // CLI flag > task-level override > defaults; undefined means the harness decides
             const requestedModel = opts.model || resolved.model;
-            // Only reported when it is actually used — printing a model the agent
+            // Only reported when it is actually used — printing a model the harness
             // ignores would make a run look like something it was not.
-            const modelName = MODEL_AWARE_AGENTS.has(agentName) ? requestedModel : undefined;
+            const modelName = MODEL_AWARE_HARNESSES.has(agentName) ? requestedModel : undefined;
             if (requestedModel && !modelName && !warnedNoModelSupport.has(agentName)) {
                 warnedNoModelSupport.add(agentName);
-                console.error(`  ${fmt.red('warning')}  --model is ignored by the "${agentName}" agent`);
+                console.error(`  ${fmt.red('warning')}  --model is ignored by the "${agentName}" harness`);
             }
 
             // Build agent config
             const agentConfig: AgentConfig = {};
-            if (agentName === 'claude') {
+            if (agentName === 'claude-code') {
                 if (modelName) agentConfig.claude = { model: modelName };
-            } else if (agentName === 'gemini') {
+            } else if (agentName === 'gemini-cli') {
                 if (modelName) agentConfig.gemini = { model: modelName };
             } else if (agentName === 'codex') {
                 if (modelName) agentConfig.codex = { model: modelName };
             } else if (agentName === 'acp') {
                 const acpCommand = opts.acpCommand || resolved.acp?.command;
                 if (!acpCommand) {
-                    throw new Error('ACP agent requires a command. Specify via --acp-command or acp.command in eval.yaml');
+                    throw new Error('The acp harness requires a command. Specify via --acp-command or acp.command in eval.yaml');
                 }
                 agentConfig.acp = {
                     command: acpCommand,
@@ -237,18 +237,18 @@ export async function runEvals(dir: string, opts: RunOptions) {
             } else if (agentName === 'command') {
                 const command = opts.command || resolved.command;
                 if (!command) {
-                    throw new Error('Command agent requires a command. Specify via --command or command in eval.yaml');
+                    throw new Error('The command harness requires a command. Specify via --command or command in eval.yaml');
                 }
                 agentConfig.command = { command };
             }
 
-            // Pick provider
+            // Pick the runtime
             const provider = providerName === 'docker'
                 ? new DockerProvider()
                 : new LocalProvider();
 
             const runner = new EvalRunner(provider, resultsDir, opts.validate ? undefined : {
-                ...runProvenance, agent: agentName, model: modelName ?? null,
+                ...runProvenance, harness: agentName, model: modelName ?? null,
             });
 
             if (opts.validate) {
@@ -282,7 +282,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
                 const agent = createAgent(agentName, agentConfig);
 
                 header(`${resolved.name}  ${fmt.dim(`(${taskIndex}/${tasksToRun.length})`)}`);
-                console.log(`    ${fmt.dim('agent')} ${agentName}${modelName ? `  ${fmt.dim('model')} ${modelName}` : ''}  ${fmt.dim('provider')} ${providerName}  ${fmt.dim('trials')} ${trials}${parallel > 1 ? `  ${fmt.dim('parallel')} ${parallel}` : ''}`);
+                console.log(`    ${fmt.dim('harness')} ${agentName}${modelName ? `  ${fmt.dim('model')} ${modelName}` : ''}  ${fmt.dim('runtime')} ${providerName}  ${fmt.dim('trials')} ${trials}${parallel > 1 ? `  ${fmt.dim('parallel')} ${parallel}` : ''}`);
                 console.log();
 
                 try {
@@ -443,20 +443,20 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
     await fs.ensureDir(path.join(tmpDir, 'environment'));
     let dockerfileContent = `FROM ${resolved.docker.base}\n\nWORKDIR /workspace\n\n`;
 
-    // Install agent CLI
-    if (resolved.agent === 'gemini') {
+    // Install the harness
+    if (resolved.harness === 'gemini-cli') {
         dockerfileContent += `RUN npm install -g @google/gemini-cli\n\n`;
-    } else if (resolved.agent === 'claude') {
+    } else if (resolved.harness === 'claude-code') {
         dockerfileContent += `RUN npm install -g @anthropic-ai/claude-code\n\n`;
-    } else if (resolved.agent === 'codex') {
+    } else if (resolved.harness === 'codex') {
         dockerfileContent += `RUN npm install -g @openai/codex\n\n`;
-    } else if (resolved.agent === 'acp') {
+    } else if (resolved.harness === 'acp') {
         dockerfileContent += `RUN npm install -g @google/gemini-cli\n\n`;
-    } else if (resolved.agent === 'opencode') {
+    } else if (resolved.harness === 'opencode') {
         dockerfileContent += `RUN npm install -g opencode\n\n`;
     }
-    // The 'command' agent brings its own binary — install it via docker.setup
-    // below, or use `provider: local` to run a command on the host.
+    // The 'command' harness brings its own binary — install it via docker.setup
+    // below, or use `runtime: local` to run a command on the host.
 
     // Docker setup commands
     if (resolved.docker.setup) {
@@ -474,8 +474,8 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
     for (const w of resolved.workspace) {
         const srcPath = await findSrc(w.src);
         if (srcPath) {
-            if (resolved.provider === 'local') {
-                // For local provider: copy directly to destination path in tmpDir
+            if (resolved.runtime === 'local') {
+                // For the local runtime: copy directly to destination path in tmpDir
                 const destPath = path.join(tmpDir, w.dest);
                 await fs.ensureDir(path.dirname(destPath));
                 await fs.copy(srcPath, destPath);

@@ -13,14 +13,14 @@ Configure shared settings for all tasks.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `agent` | string | auto-detect | `gemini`, `claude`, `codex`, `acp`, `opencode`, or `command` |
-| `command` | string | none | Command to run when `agent` is `command` (e.g. `node mycli.js`). Required for the `command` agent. |
-| `provider` | string | `docker` | `docker` or `local` |
+| `harness` | string | auto-detect | The agent CLI under test: `gemini-cli`, `claude-code`, `codex`, `acp`, `opencode`, or `command` |
+| `command` | string | none | Command to run when `harness` is `command` (e.g. `node mycli.js`). Required for the `command` harness. |
+| `runtime` | string | `docker` | Where trials run: `docker` or `local` |
 | `trials` | number | 5 | Number of evaluation trials |
 | `timeout` | number | 300 | Seconds before agent timeout |
 | `threshold` | number | 0.8 | Pass rate threshold for `--ci` mode |
-| `grader_model` | string | latest, resolved via the provider's API | Default LLM model for rubric graders. Also overridable per-run with `ANTHROPIC_MODEL` / `OPENAI_MODEL` / `GEMINI_MODEL`. |
-| `grader_provider` | string | `gemini` | Default LLM provider for rubric graders (`gemini`, `anthropic`, `openai`, or `jev`) |
+| `llm_model` | string | latest, resolved via the provider's API | Default LLM model for rubric graders. Also overridable per-run with `ANTHROPIC_MODEL` / `OPENAI_MODEL` / `GEMINI_MODEL`. |
+| `llm_provider` | string | `gemini` | Default LLM API for rubric graders (`gemini`, `anthropic`, `openai`, or `jev`) |
 
 ### defaults.docker
 
@@ -53,7 +53,7 @@ Array of evaluation tasks. Each task has:
 | `instruction` | string | Yes | What the agent should accomplish. Supports file references. |
 | `workspace` | array | No | Files copied into the container |
 | `graders` | array | Yes | One or more grader definitions |
-| `agent` | string | No | Per-task agent override |
+| `harness` | string | No | Per-task harness override |
 | `command` | string | No | Per-task command override (for the `command` agent) |
 | `trials` | number | No | Per-task trial count override |
 | `timeout` | number | No | Per-task timeout override |
@@ -74,8 +74,8 @@ Array of evaluation tasks. Each task has:
 | `run` | string | Deterministic only | Command to execute |
 | `setup` | string | No | Install command for grader dependencies |
 | `rubric` | string | LLM only | Evaluation rubric text or file path |
-| `provider` | string | No | LLM provider: `gemini` (default), `anthropic`, `openai`, or `jev` |
-| `model` | string | No | LLM model override. Highest precedence: beats `defaults.grader_model`, the `*_MODEL` env vars, and the dynamically resolved default. |
+| `llm_provider` | string | No | LLM API that scores the rubric: `gemini` (default), `anthropic`, `openai`, or `jev` |
+| `llm_model` | string | No | LLM model override. Highest precedence: beats `defaults.llm_model`, the `*_MODEL` env vars, and the dynamically resolved default. |
 | `weight` | number | No | Grader weight (default: 1) |
 
 ## File References

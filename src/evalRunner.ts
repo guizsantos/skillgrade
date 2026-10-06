@@ -4,7 +4,7 @@ import {
     BaseAgent, EnvironmentProvider,
     LogEntry, TrialResult, EvalReport, GraderResult, AgentResult
 } from './types';
-import { ResolvedGrader } from './core/config.types';
+import { ResolvedGrader, LlmProvider } from './core/config.types';
 import { Provenance } from './core/provenance';
 import { getGrader } from './graders';
 import { fmt, Spinner } from './utils/cli';
@@ -65,8 +65,8 @@ export interface EvalRunOptions {
     instruction: string;
     graders: ResolvedGrader[];
     timeoutSec: number;
-    graderModel?: string;       // default LLM grader model
-    graderProvider?: 'gemini' | 'anthropic' | 'openai' | 'jev';  // default LLM grader provider
+    llmModel?: string;          // default model for llm_rubric graders
+    llmProvider?: LlmProvider;  // default LLM API for llm_rubric graders
     graderTimeoutSec?: number;  // timeout per grader (default: 120s)
     expected?: unknown;                     // reference output handed to graders
     metadata?: Record<string, unknown>;     // task labels handed to graders and recorded with results
@@ -251,8 +251,8 @@ export class EvalRunner {
                     rubric: graderDef.type === 'llm_rubric'
                         ? `prompts/${llmIndex === 0 ? 'quality.md' : `quality_${llmIndex}.md`}`
                         : undefined,
-                    model: graderDef.model || opts.graderModel,
-                    provider: graderDef.provider || opts.graderProvider,
+                    model: graderDef.llm_model || opts.llmModel,
+                    provider: graderDef.llm_provider || opts.llmProvider,
                     weight: graderDef.weight,
                     // Assembled here, after the agent has exited — so the
                     // reference answer cannot reach the agent.

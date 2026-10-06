@@ -21,7 +21,8 @@ export interface Provenance {
     dirty?: string[];            // legacy: reports from before uncommitted runs were refused
     from_head?: boolean;         // read from a worktree at HEAD, leaving `ignored` out
     ignored?: string[];          // `git status --porcelain` lines not evaluated
-    agent?: string;
+    harness?: string;            // the agent CLI under test
+    agent?: string;              // legacy: `harness` before it was renamed
     model?: string | null;
     args: string[];
     eval_dir: string;
@@ -37,7 +38,7 @@ function git(cwd: string, ...args: string[]): string | null {
 }
 
 /**
- * Run-level provenance; `agent` and `model` are added per task. `evalFiles` are
+ * Run-level provenance; `harness` and `model` are added per task. `evalFiles` are
  * eval inputs outside the eval dir (imported YAML).
  */
 export function gitProvenance(evalDir: string, skillDirs: string[], evalFiles: string[] = [], now = new Date()): Provenance {

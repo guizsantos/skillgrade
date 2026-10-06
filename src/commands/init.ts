@@ -184,8 +184,8 @@ Respond with ONLY the eval.yaml content. Use this exact format:
 version: "1"
 
 defaults:
-  agent: gemini
-  provider: docker
+  harness: gemini-cli
+  runtime: docker
   trials: 5
   timeout: 300
   threshold: 0.8
@@ -317,8 +317,8 @@ function getInlineTemplate(): string {
   return `version: "1"
 
 defaults:
-  agent: gemini
-  provider: docker
+  harness: gemini-cli
+  runtime: docker
   trials: 5
   timeout: 300
   threshold: 0.8

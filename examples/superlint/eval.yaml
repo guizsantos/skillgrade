@@ -12,8 +12,8 @@
 version: "1"
 
 defaults:
-  agent: gemini
-  provider: docker
+  harness: gemini-cli
+  runtime: docker
   trials: 5
   timeout: 300
   threshold: 0.8

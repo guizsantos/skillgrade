@@ -87,8 +87,8 @@ describe('resolvedToTaskConfig', () => {
       instruction: 'do it',
       workspace: [],
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 0.7 }],
-      agent: 'gemini',
-      provider: 'docker',
+      harness: 'gemini-cli',
+      runtime: 'docker',
       trials: 5,
       timeout: 300,
       docker: { base: 'node:20-slim' },
@@ -107,8 +107,8 @@ describe('resolvedToTaskConfig', () => {
       instruction: 'do it',
       workspace: [],
       graders: [{ type: 'llm_rubric', rubric: 'check quality', weight: 0.3 }],
-      agent: 'gemini',
-      provider: 'docker',
+      harness: 'gemini-cli',
+      runtime: 'docker',
       trials: 5,
       timeout: 300,
       docker: { base: 'node:20-slim' },
@@ -127,8 +127,8 @@ describe('resolvedToTaskConfig', () => {
       instruction: 'do it',
       workspace: [],
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 1.0 }],
-      agent: 'gemini',
-      provider: 'docker',
+      harness: 'gemini-cli',
+      runtime: 'docker',
       trials: 5,
       timeout: 600,
       docker: { base: 'node:20-slim' },
@@ -145,8 +145,8 @@ describe('resolvedToTaskConfig', () => {
       instruction: 'do it',
       workspace: [],
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 1.0 }],
-      agent: 'gemini',
-      provider: 'docker',
+      harness: 'gemini-cli',
+      runtime: 'docker',
       trials: 5,
       timeout: 300,
       docker: { base: 'node:20-slim' },
@@ -169,8 +169,8 @@ describe('resolvedToTaskConfig', () => {
         { type: 'deterministic', run: 'echo ok', weight: 0.7 },
         { type: 'llm_rubric', rubric: 'quality criteria', weight: 0.3 },
       ],
-      agent: 'gemini',
-      provider: 'docker',
+      harness: 'gemini-cli',
+      runtime: 'docker',
       trials: 5,
       timeout: 300,
       docker: { base: 'node:20-slim' },
@@ -189,8 +189,8 @@ describe('resolvedToTaskConfig', () => {
       instruction: 'do it',
       workspace: [],
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 1.0 }],
-      agent: 'gemini',
-      provider: 'docker',
+      harness: 'gemini-cli',
+      runtime: 'docker',
       trials: 5,
       timeout: 300,
       docker: { base: 'node:20-slim' },
@@ -240,12 +240,12 @@ SINGLE='quoted'
 });
 
 describe('prepareTempTaskDir', () => {
-  it('copies workspace files directly to destination for local provider', async () => {
+  it('copies workspace files directly to destination for the local runtime', async () => {
     const resolved: ResolvedTask = {
       name: 'test',
       instruction: 'test',
-      provider: 'local',
-      agent: 'gemini',
+      runtime: 'local',
+      harness: 'gemini-cli',
       trials: 1,
       timeout: 10,
       docker: { base: 'node' },
@@ -262,12 +262,12 @@ describe('prepareTempTaskDir', () => {
     expect(mockCopy).toHaveBeenCalledWith(path.resolve('/base', 'src/main.ts'), path.join('/tmp/task', 'app/main.ts'));
   });
 
-  it('copies workspace files to root and appends COPY to Dockerfile for docker provider', async () => {
+  it('copies workspace files to root and appends COPY to Dockerfile for the docker runtime', async () => {
     const resolved: ResolvedTask = {
       name: 'test',
       instruction: 'test',
-      provider: 'docker',
-      agent: 'gemini',
+      runtime: 'docker',
+      harness: 'gemini-cli',
       trials: 1,
       timeout: 10,
       docker: { base: 'node' },

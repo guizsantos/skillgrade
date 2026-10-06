@@ -236,6 +236,8 @@ footer { margin-top: 96px; padding-top: 24px; border-top: 1px solid var(--line);
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+// An llm_rubric's LLM; reports from before the rename call its fields provider/model
+const llm = g => [g.llm_provider || g.provider, g.llm_model || g.model].filter(Boolean).join(" / ");
 const f2 = x => x == null ? "—" : x.toFixed(2);
 const pct = x => x == null ? "—" : Math.round(x * 100) + "%";
 const sgn = x => x == null ? "—" : (x > 0 ? "+" : "") + x.toFixed(2);
@@ -504,7 +506,7 @@ function runPage(s, runId) {
       <dt>Commit</dt><dd class="mono">${esc(p.commit)}</dd>
       <dt>Skill version</dt><dd class="mono ${diff(prev && prev.skill_version, r.skill_version)}">${esc(r.skill_version)}${p.skill_commit ? "" : ` <span class="faint">(no git commit recorded)</span>`}</dd>
       <dt>Eval version</dt><dd class="mono ${diff(prev && prev.eval_version, r.eval_version)}">${esc(p.eval_commit || "—")}</dd>
-      <dt>Agent</dt><dd class="mono">${esc(p.agent || "—")}</dd><dt>Model</dt><dd class="mono">${esc(p.model || "agent default")}</dd>${p.eval_dir ? `<dt>Eval dir</dt><dd class="mono">${esc(p.eval_dir)}</dd>` : ""}<dt>Args</dt><dd class="mono">${esc((p.args || []).join(" ") || "—")}</dd>
+      <dt>Harness</dt><dd class="mono">${esc(p.harness || p.agent || "—")}</dd><dt>Model</dt><dd class="mono">${esc(p.model || "agent default")}</dd>${p.eval_dir ? `<dt>Eval dir</dt><dd class="mono">${esc(p.eval_dir)}</dd>` : ""}<dt>Args</dt><dd class="mono">${esc((p.args || []).join(" ") || "—")}</dd>
       ${(p.dirty || []).length ? `<dt>Uncommitted</dt><dd class="mono">${p.dirty.map(esc).join("<br>")}</dd>` : ""}
       ${p.from_head ? `<dt>Left out (--from-head)</dt><dd class="mono">${(p.ignored || []).map(esc).join("<br>")}</dd>` : ""}</dl></div>`;
   return h + `</div>`;
@@ -568,7 +570,7 @@ const graderBlock = t => g => {
   const head = `<div class="mono" style="margin-top:20px;font-size:13px;color:var(--soft);word-break:break-all">${esc(g.type)} · weight ${esc(g.weight)} <span class="faint">(${Math.round(w / share * 100)}% of the reward)</span>`;
   const block = (label, body, note) => `<details class="solo" style="margin-top:12px;padding:14px 18px"><summary style="font-size:14px"><span>${label}</span>${note ? `<span class="faint" style="font-weight:400;font-size:12px">${note}</span>` : ""}</summary><pre>${esc(body)}</pre></details>`;
   if (g.type !== "llm_rubric") return `${head} · ${esc(g.run.split("\n")[0].replace(/^# /, ""))}</div>${block("Source", g.run)}`;
-  return `${head}${g.provider || g.model ? ` · judge ${esc([g.provider, g.model].filter(Boolean).join(" / "))}` : ""}</div>
+  return `${head}${llm(g) ? ` · LLM ${esc(llm(g))}` : ""}</div>
     ${block("Rubric", g.rubric, "## Rubric")}
     ${t.expected != null ? block("Expected Output", t.expected, "## Expected Output · judge only") : `<p class="muted" style="font-size:13px;margin:12px 0 0">No <span class="mono">expected:</span> on this task: the judge gets the rubric and the transcript only.</p>`}`;
 };

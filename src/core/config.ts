@@ -12,15 +12,17 @@ import {
     WorkspaceMapping,
     EnvironmentConfig,
     AcpConfig,
+    LlmProvider,
 } from './config.types';
 import { loadYamlWithImports, sourceFileOf } from './imports';
+import { harnessName } from '../agents/registry';
 
 // We use a simple YAML parser — js-yaml is the standard
 // For now, we'll use a lightweight approach: JSON-compatible YAML subset
 
 const DEFAULT_CONFIG: EvalDefaults = {
-    agent: 'gemini',
-    provider: 'docker',
+    harness: 'gemini-cli',
+    runtime: 'docker',
     trials: 5,
     timeout: 300,
     threshold: 0.8,
@@ -48,12 +50,44 @@ export async function loadEvalConfig(dir: string): Promise<EvalConfig> {
     return validateConfig(raw);
 }
 
+const VALID_LLM_PROVIDERS: LlmProvider[] = ['gemini', 'anthropic', 'openai', 'jev'];
+
+/** Keys renamed so each names one thing; the old ones still load, with a warning. */
+const RENAMED_KEYS: Record<string, string> = {
+    agent: 'harness',              // the agent CLI under test
+    provider: 'runtime',           // where trials run
+    grader_provider: 'llm_provider',
+    grader_model: 'llm_model',
+};
+const RENAMED_GRADER_KEYS: Record<string, string> = { provider: 'llm_provider', model: 'llm_model' };
+const warned = new Set<string>();
+
+/** Rewrite deprecated keys of `obj` in place; `where` names it in the warning. */
+function renameLegacyKeys(obj: any, renames: Record<string, string>, where: string) {
+    if (!obj || typeof obj !== 'object') return;
+    for (const [old, now] of Object.entries(renames)) {
+        if (!(old in obj)) continue;
+        if (!warned.has(`${where}.${old}`)) {
+            warned.add(`${where}.${old}`);
+            console.error(`  warning  eval.yaml: "${old}" in ${where} is deprecated, use "${now}"`);
+        }
+        if (!(now in obj)) obj[now] = obj[old];
+        delete obj[old];
+    }
+}
+
 /**
  * Validate raw parsed YAML into a typed EvalConfig.
  */
 function validateConfig(raw: any): EvalConfig {
     if (!raw || typeof raw !== 'object') {
         throw new Error('eval.yaml must be a YAML object');
+    }
+
+    renameLegacyKeys(raw.defaults, RENAMED_KEYS, 'defaults');
+    for (const t of Array.isArray(raw.tasks) ? raw.tasks : []) {
+        renameLegacyKeys(t, RENAMED_KEYS, 'a task');
+        for (const g of Array.isArray(t?.graders) ? t.graders : []) renameLegacyKeys(g, RENAMED_GRADER_KEYS, 'a grader');
     }
 
     const version = raw.version || '1';
@@ -88,10 +122,9 @@ function validateConfig(raw: any): EvalConfig {
         defaults.acp = acp;
     }
 
-    // Validate grader_provider
-    const validGraderProviders = ['gemini', 'anthropic', 'openai', 'jev'];
-    if (defaults.grader_provider && !validGraderProviders.includes(defaults.grader_provider)) {
-        throw new Error(`eval.yaml: grader_provider must be one of ${validGraderProviders.join(', ')}, got "${defaults.grader_provider}"`);
+    defaults.harness = harnessName(defaults.harness);
+    if (defaults.llm_provider && !VALID_LLM_PROVIDERS.includes(defaults.llm_provider)) {
+        throw new Error(`eval.yaml: llm_provider must be one of ${VALID_LLM_PROVIDERS.join(', ')}, got "${defaults.llm_provider}"`);
     }
 
     if (!raw.tasks || !Array.isArray(raw.tasks) || raw.tasks.length === 0) {
@@ -104,15 +137,15 @@ function validateConfig(raw: any): EvalConfig {
         if (!t.graders || !Array.isArray(t.graders) || t.graders.length === 0) {
             throw new Error(`Task "${t.name}" must have at least one grader`);
         }
-        if (t.grader_provider && !validGraderProviders.includes(t.grader_provider)) {
-            throw new Error(`Task "${t.name}" has invalid grader_provider "${t.grader_provider}", must be one of ${validGraderProviders.join(', ')}`);
+        if (t.llm_provider && !VALID_LLM_PROVIDERS.includes(t.llm_provider)) {
+            throw new Error(`Task "${t.name}" has invalid llm_provider "${t.llm_provider}", must be one of ${VALID_LLM_PROVIDERS.join(', ')}`);
         }
+        const harness = t.harness ? harnessName(t.harness) : undefined;
 
-        // The "command" agent requires a command (per-task override or inherited default)
-        const effectiveAgent = t.agent || defaults.agent;
+        // The "command" harness requires a command (per-task override or inherited default)
         const effectiveCommand = t.command || defaults.command;
-        if (effectiveAgent === 'command' && !effectiveCommand) {
-            throw new Error(`Task "${t.name}" uses the "command" agent but no command is set (add a "command" to the task or defaults)`);
+        if ((harness || defaults.harness) === 'command' && !effectiveCommand) {
+            throw new Error(`Task "${t.name}" uses the "command" harness but no command is set (add a "command" to the task or defaults)`);
         }
 
         if (t.metadata !== undefined && (typeof t.metadata !== 'object' || t.metadata === null || Array.isArray(t.metadata))) {
@@ -135,30 +168,30 @@ function validateConfig(raw: any): EvalConfig {
             instruction: t.instruction,
             workspace,
             graders: t.graders.map((g: any) => {
-                if (g.provider && !validGraderProviders.includes(g.provider)) {
-                    throw new Error(`Task "${t.name}" grader has invalid provider "${g.provider}", must be one of ${validGraderProviders.join(', ')}`);
+                if (g.llm_provider && !VALID_LLM_PROVIDERS.includes(g.llm_provider)) {
+                    throw new Error(`Task "${t.name}" grader has invalid llm_provider "${g.llm_provider}", must be one of ${VALID_LLM_PROVIDERS.join(', ')}`);
                 }
                 return {
                     type: g.type,
                     setup: g.setup,
                     run: g.run,
                     rubric: g.rubric,
-                    model: g.model,
-                    provider: g.provider,
+                    llm_model: g.llm_model,
+                    llm_provider: g.llm_provider,
                     weight: g.weight ?? 1.0,
                 };
             }),
             solution: t.solution,
             expected: t.expected,
             metadata: t.metadata,
-            agent: t.agent,
+            harness,
             model: t.model,
             command: t.command,
-            provider: t.provider,
+            runtime: t.runtime,
             trials: t.trials,
             timeout: t.timeout,
-            grader_model: t.grader_model,
-            grader_provider: t.grader_provider,
+            llm_model: t.llm_model,
+            llm_provider: t.llm_provider,
             docker: t.docker,
             environment: t.environment,
             sourceFile: sourceFileOf(t),
@@ -177,10 +210,10 @@ export async function resolveTask(
     baseDir: string
 ): Promise<ResolvedTask> {
     // Merge defaults with task overrides
-    const agent = task.agent || defaults.agent;
+    const harness = task.harness || defaults.harness;
     const model = task.model || defaults.model;
     const command = task.command || defaults.command;
-    const provider = task.provider || defaults.provider;
+    const runtime = task.runtime || defaults.runtime;
     const trials = task.trials ?? defaults.trials;
     const timeout = task.timeout ?? defaults.timeout;
     const docker = {
@@ -191,8 +224,8 @@ export async function resolveTask(
         ...defaults.environment,
         ...(task.environment || {}),
     };
-    const grader_model = task.grader_model || defaults.grader_model;
-    const grader_provider = task.grader_provider || defaults.grader_provider;
+    const llm_model = task.llm_model || defaults.llm_model;
+    const llm_provider = task.llm_provider || defaults.llm_provider;
     const acp = defaults.acp;  // ACP config is only at defaults level
 
     // An imported task's relative paths belong to its own directory first,
@@ -211,8 +244,8 @@ export async function resolveTask(
             const resolved: ResolvedGrader = {
                 type: g.type,
                 setup: g.setup,
-                model: g.model,
-                provider: g.provider,
+                llm_model: g.llm_model,
+                llm_provider: g.llm_provider,
                 weight: g.weight,
             };
             if (g.type === 'deterministic' && g.run) {
@@ -238,14 +271,14 @@ export async function resolveTask(
         solution,
         expected: task.expected,
         metadata: task.metadata,
-        agent,
+        harness,
         model,
         command,
-        provider,
+        runtime,
         trials,
         timeout,
-        grader_model,
-        grader_provider,
+        llm_model,
+        llm_provider,
         acp,
         docker,
         environment,

@@ -198,7 +198,7 @@ describe('LLMGrader', () => {
     const result = await grader.grade('/workspace', provider, config, '/task', []);
 
     expect(result.score).toBe(0);
-    expect(result.details).toContain('Unknown grader provider');
+    expect(result.details).toContain('Unknown llm_provider');
   });
 
   describe('gemini provider', () => {

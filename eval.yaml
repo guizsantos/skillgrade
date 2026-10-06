@@ -9,8 +9,8 @@
 version: "1"
 
 defaults:
-  agent: gemini
-  provider: docker
+  harness: gemini-cli
+  runtime: docker
   trials: 5
   timeout: 600
   threshold: 0.7
@@ -69,7 +69,7 @@ tasks:
       # writing a free-form critique: keep its rubric to a single question.
       # Needs JEV_API_KEY.
       - type: llm_rubric
-        provider: jev
+        llm_provider: jev
         rubric: |
           Are the task instructions in the generated eval.yaml specific and
           actionable: could an agent that never saw SKILL.md tell exactly what

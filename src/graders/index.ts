@@ -191,7 +191,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 } else if (providerName === 'openai') {
                     model = await resolveOpenAIModel(env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY, env, 'grader');
                 } else {
-                    throw new Error(`Unknown grader provider: "${providerName}". Supported: gemini, anthropic, openai, jev`);
+                    throw new Error(`Unknown llm_provider: "${providerName}". Supported: gemini, anthropic, openai, jev`);
                 }
             } catch (err: any) {
                 return {
@@ -215,7 +215,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                     grader_type: 'llm_rubric',
                     score: 0,
                     weight: config.weight,
-                    details: `Unknown grader provider: "${providerName}". Supported: gemini, anthropic, openai, jev`,
+                    details: `Unknown llm_provider: "${providerName}". Supported: gemini, anthropic, openai, jev`,
                 };
         }
     }
@@ -253,7 +253,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 grader_type: 'llm_rubric',
                 score: 0,
                 weight: config.weight,
-                details: 'Missing GEMINI_API_KEY. Set the GEMINI_API_KEY environment variable to use the "gemini" grader provider.'
+                details: 'Missing GEMINI_API_KEY. Set the GEMINI_API_KEY environment variable for llm_provider "gemini".'
             };
         }
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -285,7 +285,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 grader_type: 'llm_rubric',
                 score: 0,
                 weight: config.weight,
-                details: 'Missing ANTHROPIC_API_KEY. Set the ANTHROPIC_API_KEY environment variable to use the "anthropic" grader provider.'
+                details: 'Missing ANTHROPIC_API_KEY. Set the ANTHROPIC_API_KEY environment variable for llm_provider "anthropic".'
             };
         }
         const baseUrl = (env?.ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
@@ -325,7 +325,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 grader_type: 'llm_rubric',
                 score: 0,
                 weight: config.weight,
-                details: 'Missing OPENAI_API_KEY. Set the OPENAI_API_KEY environment variable to use the "openai" grader provider.'
+                details: 'Missing OPENAI_API_KEY. Set the OPENAI_API_KEY environment variable for llm_provider "openai".'
             };
         }
         const baseUrl = (env?.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
@@ -373,7 +373,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 grader_type: 'llm_rubric',
                 score: 0,
                 weight: config.weight,
-                details: 'Missing JEV_API_KEY. Set the JEV_API_KEY environment variable to use the "jev" grader provider.'
+                details: 'Missing JEV_API_KEY. Set the JEV_API_KEY environment variable for llm_provider "jev".'
             };
         }
         const baseUrl = (env?.JEV_BASE_URL || process.env.JEV_BASE_URL || 'https://api.typesafe.ai/v1').replace(/\/+$/, '');
