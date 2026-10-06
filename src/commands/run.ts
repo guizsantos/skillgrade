@@ -163,6 +163,26 @@ export async function runEvals(dir: string, opts: RunOptions) {
             const trials = opts.trials ?? resolved.trials;
             const parallel = opts.parallel ?? 1;
 
+            // Pick the harness: CLI flag > task-level override > auto-detect from API key > default
+            let agentName = opts.harness ? harnessName(opts.harness) : resolved.harness;
+            if (!opts.harness && !taskDef.harness) {
+                // No explicit override — auto-detect from available API keys
+                const hasGemini = !!env.GEMINI_API_KEY;
+                const hasAnthropic = !!env.ANTHROPIC_API_KEY;
+                const hasOpenAI = !!env.OPENAI_API_KEY;
+                const keyCount = [hasGemini, hasAnthropic, hasOpenAI].filter(Boolean).length;
+                if (keyCount === 1) {
+                    if (hasAnthropic) agentName = 'claude-code';
+                    else if (hasOpenAI) agentName = 'codex';
+                    else if (hasGemini) agentName = 'gemini-cli';
+                }
+            }
+            const providerName = opts.runtime || resolved.runtime;
+            // The task dir is laid out for these: the Dockerfile installs the harness that
+            // runs, and workspace files go where the runtime that runs expects them
+            resolved.harness = agentName;
+            resolved.runtime = providerName;
+
             // Create a temp task directory for Docker builds
             const tmpTaskDir = path.join(outputDir, 'tmp', resolved.name);
             await prepareTempTaskDir(resolved, src, tmpTaskDir);
@@ -181,21 +201,6 @@ export async function runEvals(dir: string, opts: RunOptions) {
                 environment: resolved.environment,
             };
 
-            // Pick the harness: CLI flag > task-level override > auto-detect from API key > default
-            let agentName = opts.harness ? harnessName(opts.harness) : resolved.harness;
-            if (!opts.harness && !taskDef.harness) {
-                // No explicit override — auto-detect from available API keys
-                const hasGemini = !!env.GEMINI_API_KEY;
-                const hasAnthropic = !!env.ANTHROPIC_API_KEY;
-                const hasOpenAI = !!env.OPENAI_API_KEY;
-                const keyCount = [hasGemini, hasAnthropic, hasOpenAI].filter(Boolean).length;
-                if (keyCount === 1) {
-                    if (hasAnthropic) agentName = 'claude-code';
-                    else if (hasOpenAI) agentName = 'codex';
-                    else if (hasGemini) agentName = 'gemini-cli';
-                }
-            }
-            const providerName = opts.runtime || resolved.runtime;
             // CLI flag > task-level override > defaults; undefined means the harness decides
             const requestedModel = opts.model || resolved.model;
             // Only reported when it is actually used — printing a model the harness
