@@ -1,4 +1,5 @@
 import type { Provenance } from './core/provenance';
+import type { LlmProvider } from './core/config.types';
 export interface CommandResult {
     stdout: string;
     stderr: string;
@@ -10,7 +11,7 @@ export interface GraderConfig {
     command?: string;                             // for deterministic: shell command to execute (e.g. 'bash tests/test.sh')
     rubric?: string;                              // for llm_rubric: file path to rubric (e.g. 'prompts/quality.md')
     model?: string;                               // for llm_rubric: LLM model override
-    provider?: 'gemini' | 'anthropic' | 'openai'; // for llm_rubric: which LLM API to call (default: 'gemini')
+    provider?: LlmProvider; // for llm_rubric: which LLM API to call (eval.yaml's llm_provider; default: 'gemini')
     weight: number;
     input?: GraderInput;                          // task context handed to the grader at grade time
 }

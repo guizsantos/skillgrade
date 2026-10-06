@@ -32,7 +32,7 @@ Generates `eval.yaml` with AI-powered tasks and graders. Without an API key, cre
 GEMINI_API_KEY=your-key skillgrade --smoke
 ```
 
-The agent is auto-detected from your API key: `GEMINI_API_KEY` → Gemini, `ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → Codex. Override with `--agent=claude`.
+The agent is auto-detected from your API key: `GEMINI_API_KEY` → Gemini, `ANTHROPIC_API_KEY` → Claude, `OPENAI_API_KEY` → Codex. Override with `--harness=claude-code`.
 
 **4. Review**:
 
@@ -61,7 +61,7 @@ Reports are saved to `$TMPDIR/skillgrade/<skill-name>/results/`. Override with `
 - `skill_commit`: the last commit that touched the skill.
 - `eval_commit`: the last commit that touched the eval dir or a file `eval.yaml` imports.
 - `from_head` and `ignored`, when the run used `--from-head` (see below).
-- `agent`, `model`, `args`, and the eval and skill paths.
+- `harness`, `model`, `args`, and the eval and skill paths.
 
 Runs are compared only when their `eval_commit` and model match the latest run's. Anything else measures a different test, not a different skill.
 
@@ -91,9 +91,9 @@ Reports from before provenance existed still show: each file is a run of its own
 | `--grader=TYPE` | Run only graders of a type (`deterministic` or `llm_rubric`) |
 | `--trials=N` | Override trial count |
 | `--parallel=N` | Run trials concurrently |
-| `--agent=gemini\|claude\|codex\|acp\|opencode\|command` | Override agent (default: auto-detect from API key) |
+| `--harness=gemini-cli\|claude-code\|codex\|acp\|opencode\|command` | The agent CLI under test (default: auto-detect from API key) |
 | `--model=NAME` | Model the agent answers with (`gemini`, `claude`, `codex`, `opencode`). Default: whatever the agent CLI is configured to use |
-| `--provider=docker\|local` | Override provider |
+| `--runtime=docker\|local` | Where trials run |
 | `--acp-command=CMD` | ACP agent command (e.g., `gemini --acp`) |
 | `--command=CMD` | Command to run for the `command` agent (e.g., `node mycli.js`) |
 | `--opencode-agent=NAME` | OpenCode agent (build\|plan\|explore) |
@@ -114,15 +114,15 @@ version: "1"
 # skill: path/to/my-skill
 
 defaults:
-  agent: gemini          # gemini | claude | codex | acp | opencode | command
-  model: claude-opus-5   # model the agent answers with (gemini, claude, codex, opencode)
-  provider: docker       # docker | local
+  harness: gemini-cli    # the agent CLI under test: gemini-cli | claude-code | codex | acp | opencode | command
+  model: claude-opus-5   # model the harness answers with (gemini-cli, claude-code, codex, opencode)
+  runtime: docker        # where trials run: docker | local
   trials: 5
   timeout: 300           # seconds
   threshold: 0.8         # for --ci mode
-  grader_model: gemini-3-flash-preview  # default LLM grader model
-  grader_provider: gemini               # default LLM grader provider: gemini | anthropic | openai
-  command: node mycli.js # command to run when agent is 'command' (see Custom Command Agent)
+  llm_model: gemini-3-flash-preview  # default model for llm_rubric graders
+  llm_provider: gemini               # default LLM API for llm_rubric graders: gemini | anthropic | openai | jev
+  command: node mycli.js # command to run when the harness is 'command' (see Custom Command Agent)
   acp:                   # ACP agent configuration (optional)
     command: gemini --acp  # command to start ACP-compatible agent
     env:                  # optional environment variables
@@ -155,17 +155,26 @@ tasks:
       - type: llm_rubric
         rubric: |
           Did the agent follow the check → fix → verify workflow?
-        provider: gemini                 # optional: gemini (default) | anthropic | openai
-        model: gemini-3.5-flash          # optional model override
+        llm_provider: gemini             # optional: gemini (default) | anthropic | openai | jev
+        llm_model: gemini-3.5-flash      # optional model override
         weight: 0.3
 
     # Per-task overrides (optional)
-    agent: claude
+    harness: claude-code
     model: claude-sonnet-5       # override the model for this task only
-    grader_provider: anthropic   # override default LLM grader provider
+    llm_provider: anthropic      # override the default LLM API for llm_rubric graders
     trials: 10
     timeout: 600
 ```
+
+**Renamed keys.** Each key now names one thing. The old names still load, with a deprecation warning:
+
+| Old | New | What it names |
+|-----|-----|---------------|
+| `agent` / `--agent` | `harness` / `--harness` | the agent CLI under test; `gemini` and `claude` are now `gemini-cli` and `claude-code` |
+| `provider` / `--provider` (task, defaults) | `runtime` / `--runtime` | where trials run: `docker` or `local` |
+| `grader_provider`, and `provider` on a grader | `llm_provider` | the LLM API that scores an `llm_rubric` |
+| `grader_model`, and `model` on a grader | `llm_model` | that API's model |
 
 String values (`instruction`, `rubric`, `run`) support **file references** — if the value is a valid file path, its contents are read automatically:
 
@@ -332,19 +341,22 @@ Evaluates the agent's session transcript against qualitative criteria:
     Efficiency (0-0.5):
     - Completed in ≤5 commands?
   weight: 0.3
-  provider: gemini           # gemini (default) | anthropic | openai
-  model: gemini-2.0-flash    # optional, auto-detected from API key
+  llm_provider: gemini       # gemini (default) | anthropic | openai | jev
+  llm_model: gemini-2.0-flash  # optional, auto-detected from API key
 ```
 
-The `provider` field selects which LLM API to call:
+The `llm_provider` field selects which LLM API scores the rubric:
 
 | Provider   | API Key Env Var     | Base URL Env Var (optional) | Default Model              |
 |------------|---------------------|-----------------------------|----------------------------|
 | `gemini`   | `GEMINI_API_KEY`    | -                           | Dynamically resolved latest Flash model (via API) |
 | `anthropic`| `ANTHROPIC_API_KEY` | `ANTHROPIC_BASE_URL`        | Dynamically resolved latest Haiku model (via API) |
 | `openai`   | `OPENAI_API_KEY`    | `OPENAI_BASE_URL`           | Dynamically resolved latest Mini/Flash model (via API) |
+| `jev`      | `JEV_API_KEY`       | `JEV_BASE_URL`              | `jev-latest` |
 
 `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` enable custom/self-hosted endpoints (Ollama, vLLM, etc.). They apply to both LLM grading and `skillgrade init`.
+
+[Jev](https://docs.typesafe.ai/introduction) is a scoring model, not a chat model: it rates the session against four levels (fails, partially, mostly, fully meets the rubric) and the expected level becomes the score. It gives no written reasoning; the grader's details show the level, the probability of each level, and Jev's confidence.
 
 ### Combining Graders
 
@@ -362,14 +374,14 @@ Final reward = `Σ (grader_score × weight) / Σ weight`
 
 ## CI Integration
 
-Use `--provider=local` in CI — the runner is already an ephemeral sandbox, so Docker adds overhead without benefit.
+Use `--runtime=local` in CI — the runner is already an ephemeral sandbox, so Docker adds overhead without benefit.
 
 ```yaml
 # .github/workflows/skillgrade.yml
 - run: |
     npm i -g skillgrade
     cd skills/superlint
-    GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} skillgrade --regression --ci --provider=local
+    GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} skillgrade --regression --ci --runtime=local
 ```
 
 Exits with code 1 if pass rate falls below `--threshold` (default: 0.8).
@@ -380,11 +392,13 @@ Exits with code 1 if pass rate falls below `--threshold` (default: 0.8).
 
 | Variable | Used by |
 |----------|---------|
-| `GEMINI_API_KEY` | Agent execution, LLM grading (`provider: gemini`), `skillgrade init` |
-| `ANTHROPIC_API_KEY` | Agent execution, LLM grading (`provider: anthropic`), `skillgrade init` |
-| `OPENAI_API_KEY` | Agent execution (Codex), LLM grading (`provider: openai`), `skillgrade init` |
-| `ANTHROPIC_BASE_URL` | LLM grading (`provider: anthropic`), `skillgrade init` — custom Anthropic-compatible endpoint |
-| `OPENAI_BASE_URL` | LLM grading (`provider: openai`), `skillgrade init` — custom OpenAI-compatible endpoint (Ollama, vLLM, etc.) |
+| `GEMINI_API_KEY` | Agent execution, LLM grading (`llm_provider: gemini`), `skillgrade init` |
+| `ANTHROPIC_API_KEY` | Agent execution, LLM grading (`llm_provider: anthropic`), `skillgrade init` |
+| `OPENAI_API_KEY` | Agent execution (Codex), LLM grading (`llm_provider: openai`), `skillgrade init` |
+| `ANTHROPIC_BASE_URL` | LLM grading (`llm_provider: anthropic`), `skillgrade init` — custom Anthropic-compatible endpoint |
+| `OPENAI_BASE_URL` | LLM grading (`llm_provider: openai`), `skillgrade init` — custom OpenAI-compatible endpoint (Ollama, vLLM, etc.) |
+| `JEV_API_KEY` | LLM grading (`llm_provider: jev`) |
+| `JEV_BASE_URL` | LLM grading (`llm_provider: jev`) — defaults to `https://api.typesafe.ai/v1` |
 | `GEMINI_MODEL` | Override the default model used for Gemini LLM grading (defaults to dynamic API lookup; throws if resolution fails) |
 | `INIT_GEMINI_MODEL` | Override the model used for Gemini in `skillgrade init` (defaults to `GEMINI_MODEL` or dynamic API lookup; throws if resolution fails) |
 | `ANTHROPIC_MODEL` | Override the default model used for Anthropic LLM grading (defaults to dynamic API lookup; throws if resolution fails) |
@@ -401,16 +415,16 @@ Bring your own agent. The built-in adapters (`gemini`, `claude`, `codex`, ...) c
 ### Quick Start
 
 ```bash
-skillgrade --agent=command --command="node mycli.js"
+skillgrade --harness=command --command="node mycli.js"
 ```
 
 Or in `eval.yaml`:
 
 ```yaml
 defaults:
-  agent: command
+  harness: command
   command: "node mycli.js"
-  provider: local        # run on the host; or use docker + docker.setup to install your CLI
+  runtime: local         # run on the host; or use docker + docker.setup to install your CLI
 ```
 
 `command` can also be set per task to override the default.
@@ -423,12 +437,12 @@ Your command runs in the workspace and is free to read/edit files there — grad
 
 ### Docker vs local
 
-- **`provider: local`** is the simplest fit for a custom agent: your command runs on the host with your tools already installed.
-- **`provider: docker`** still works — skillgrade does **not** auto-install anything for the `command` agent, so install your CLI and dependencies via `docker.setup`:
+- **`runtime: local`** is the simplest fit for a custom agent: your command runs on the host with your tools already installed.
+- **`runtime: docker`** still works — skillgrade does **not** auto-install anything for the `command` harness, so install your CLI and dependencies via `docker.setup`:
 
 ```yaml
 defaults:
-  agent: command
+  harness: command
   command: "mycli run"
   docker:
     base: node:20-slim
@@ -443,13 +457,13 @@ defaults:
 
 ```bash
 # Use OpenCode with default agent and model
-skillgrade --agent=opencode
+skillgrade --harness=opencode
 
 # Specify OpenCode agent (build|plan|explore)
-skillgrade --agent=opencode --opencode-agent=build
+skillgrade --harness=opencode --opencode-agent=build
 
 # Specify both agent and model (provider/model format)
-skillgrade --agent=opencode --opencode-agent=build --opencode-model=anthropic/claude-sonnet-4-20250514
+skillgrade --harness=opencode --opencode-agent=build --opencode-model=anthropic/claude-sonnet-4-20250514
 ```
 
 ### OpenCode Agents
@@ -473,7 +487,7 @@ Models are specified in `provider/model` format:
 
 | Flag | Description |
 |------|-------------|
-| `--agent=opencode` | Use OpenCode agent |
+| `--harness=opencode` | Use the OpenCode harness |
 | `--opencode-agent=NAME` | OpenCode agent (build\|plan\|explore) |
 | `--opencode-model=MODEL` | OpenCode model (provider/model format) |
 
@@ -482,7 +496,7 @@ Models are specified in `provider/model` format:
 1. skillgrade invokes OpenCode CLI with `opencode run`
 2. Passes instruction via temp file to avoid shell escaping issues
 3. Supports both agent and model specification
-4. Works with `--provider=docker` or `--provider=local`
+4. Works with `--runtime=docker` or `--runtime=local`
 
 ## ACP Agent
 
@@ -492,14 +506,14 @@ Models are specified in `provider/model` format:
 
 ```bash
 # Use Gemini CLI in ACP mode (requires gemini CLI installed)
-skillgrade --agent=acp --acp-command="gemini --acp"
+skillgrade --harness=acp --acp-command="gemini --acp"
 
 # Or configure in eval.yaml
 ```
 
 ```yaml
 defaults:
-  agent: acp
+  harness: acp
   acp:
     command: gemini --acp
 ```
@@ -518,13 +532,13 @@ Any agent that supports the ACP protocol can be used:
 1. skillgrade starts the ACP agent as a subprocess
 2. Communication happens via JSON-RPC 2.0 over stdio
 3. No API key required — authentication is handled by the ACP agent
-4. Works best with `--provider=local` since the ACP agent needs to be available in your environment
+4. Works best with `--runtime=local` since the ACP agent needs to be available in your environment
 
 ### CLI Options
 
 | Flag | Description |
 |------|-------------|
-| `--agent=acp` | Use ACP-compatible agent |
+| `--harness=acp` | Use an ACP-compatible agent |
 | `--acp-command=CMD` | Command to start the ACP agent |
 
 The `--acp-command` can also be set in `eval.yaml` under `defaults.acp.command`.

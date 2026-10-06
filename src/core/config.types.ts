@@ -18,10 +18,13 @@ export interface EvalGraderConfig {
     setup?: string;                               // commands to install grader dependencies (runs during image build)
     run?: string;                                 // inline script or file path (deterministic)
     rubric?: string;                              // inline rubric or file path (llm_rubric)
-    model?: string;                               // model override, e.g. 'claude-sonnet-5' or 'gemini-3-flash-preview'
-    provider?: 'gemini' | 'anthropic' | 'openai'; // which LLM API to call (default: 'gemini')
+    llm_model?: string;                           // llm_rubric: model override, e.g. 'claude-sonnet-5' or 'gemini-3-flash-preview'
+    llm_provider?: LlmProvider;                   // llm_rubric: which LLM API scores it (default: 'gemini')
     weight: number;
 }
+
+/** LLM APIs an llm_rubric grader can score with */
+export type LlmProvider = 'gemini' | 'anthropic' | 'openai' | 'jev';
 
 /** Docker configuration */
 export interface DockerConfig {
@@ -66,14 +69,14 @@ export interface EvalTaskConfig {
     metadata?: Record<string, unknown>;
 
     // Per-task overrides
-    agent?: string;
-    model?: string;     // model the agent answers with (agents that support one)
-    command?: string;   // command to run when agent is 'command'
-    provider?: string;
+    harness?: string;
+    model?: string;     // model the harness answers with (harnesses that support one)
+    command?: string;   // command to run when the harness is 'command'
+    runtime?: string;
     trials?: number;
     timeout?: number;
-    grader_model?: string;
-    grader_provider?: 'gemini' | 'anthropic' | 'openai';
+    llm_model?: string;
+    llm_provider?: LlmProvider;
     docker?: DockerConfig;
     environment?: Partial<EnvironmentConfig>;
 
@@ -83,15 +86,15 @@ export interface EvalTaskConfig {
 
 /** Top-level defaults */
 export interface EvalDefaults {
-    agent: string;      // 'gemini' | 'claude' | 'codex' | 'acp' | 'opencode' | 'command'
-    model?: string;     // model the agent answers with (agents that support one)
-    command?: string;   // command to run when agent is 'command' (e.g. "node mycli.js")
-    provider: string;   // 'docker' | 'local'
+    harness: string;    // the agent CLI under test: 'gemini-cli' | 'claude-code' | 'codex' | 'acp' | 'opencode' | 'command'
+    model?: string;     // model the harness answers with (harnesses that support one)
+    command?: string;   // command to run when the harness is 'command' (e.g. "node mycli.js")
+    runtime: string;    // where trials run: 'docker' | 'local'
     trials: number;
     timeout: number;
     threshold: number;  // for --ci mode
-    grader_model?: string;      // default LLM grader model
-    grader_provider?: 'gemini' | 'anthropic' | 'openai';  // default LLM grader provider
+    llm_model?: string;         // default model for llm_rubric graders
+    llm_provider?: LlmProvider; // default LLM API for llm_rubric graders
     acp?: AcpConfig;    // ACP agent configuration
     docker: DockerConfig;
     environment: EnvironmentConfig;
@@ -114,14 +117,14 @@ export interface ResolvedTask {
     solution?: string;      // resolved file path
     expected?: unknown;                     // reference output — graders only, never the workspace
     metadata?: Record<string, unknown>;     // filterable labels — never sent to the agent
-    agent: string;
-    model?: string;         // model the agent answers with (agents that support one)
-    command?: string;       // command to run when agent is 'command'
-    provider: string;
+    harness: string;
+    model?: string;         // model the harness answers with (harnesses that support one)
+    command?: string;       // command to run when the harness is 'command'
+    runtime: string;
     trials: number;
     timeout: number;
-    grader_model?: string;                                      // inherited default model for LLM graders
-    grader_provider?: 'gemini' | 'anthropic' | 'openai';        // inherited default provider for LLM graders
+    llm_model?: string;           // inherited default model for llm_rubric graders
+    llm_provider?: LlmProvider;   // inherited default LLM API for llm_rubric graders
     acp?: AcpConfig;        // ACP agent configuration
     docker: DockerConfig;
     environment: EnvironmentConfig;
@@ -134,7 +137,7 @@ export interface ResolvedGrader {
     setup?: string;                               // resolved setup commands
     run?: string;                                 // resolved content for deterministic
     rubric?: string;                              // resolved content for llm_rubric
-    model?: string;                               // resolved model override
-    provider?: 'gemini' | 'anthropic' | 'openai'; // which LLM API to call (default: 'gemini')
+    llm_model?: string;                           // resolved model override
+    llm_provider?: LlmProvider;                   // which LLM API scores it (default: 'gemini')
     weight: number;
 }

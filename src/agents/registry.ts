@@ -1,9 +1,10 @@
 /**
- * Agent registry — maps agent names to their implementations.
+ * Harness registry — maps harness names (the agent CLI under test) to their
+ * implementations.
  *
- * Supported agents:
- *   - gemini: Google Gemini CLI
- *   - claude: Anthropic Claude Code CLI
+ * Supported harnesses:
+ *   - gemini-cli: Google Gemini CLI
+ *   - claude-code: Anthropic Claude Code CLI
  *   - codex: OpenAI Codex CLI
  *   - acp: Agent Client Protocol compatible agents
  *   - opencode: OpenCode AI coding agent
@@ -35,8 +36,8 @@ export interface AgentConfig {
 
 /** Registry of available agent implementations */
 const AGENT_REGISTRY: Record<string, (config?: AgentConfig) => BaseAgent> = {
-    gemini: (config) => new GeminiAgent(config?.gemini || {}),
-    claude: (config) => new ClaudeAgent(config?.claude || {}),
+    'gemini-cli': (config) => new GeminiAgent(config?.gemini || {}),
+    'claude-code': (config) => new ClaudeAgent(config?.claude || {}),
     codex: (config) => new CodexAgent(config?.codex || {}),
     // ACP agent requires config, registered as placeholder
     acp: (config) => new AcpAgent(config?.acp || { command: 'gemini --acp' }),
@@ -45,17 +46,32 @@ const AGENT_REGISTRY: Record<string, (config?: AgentConfig) => BaseAgent> = {
     command: (config) => new CommandAgent(config?.command as CommandAgentConfig),
 };
 
-/** Get the list of supported agent names */
+/** Names from before harnesses were named after their CLI, not the model's vendor */
+const LEGACY_NAMES: Record<string, string> = { gemini: 'gemini-cli', claude: 'claude-code' };
+const warned = new Set<string>();
+
+/** The current name for a harness, warning once when given a deprecated one. */
+export function harnessName(name: string): string {
+    const now = LEGACY_NAMES[name];
+    if (!now) return name;
+    if (!warned.has(name)) {
+        warned.add(name);
+        console.error(`  warning  harness "${name}" is deprecated, use "${now}"`);
+    }
+    return now;
+}
+
+/** Get the list of supported harness names */
 export function getAgentNames(): string[] {
     return Object.keys(AGENT_REGISTRY);
 }
 
-/** Create an agent instance by name. Throws if the name is unknown. */
+/** Create a harness instance by name. Throws if the name is unknown. */
 export function createAgent(name: string, config?: AgentConfig): BaseAgent {
-    const factory = AGENT_REGISTRY[name];
+    const factory = AGENT_REGISTRY[harnessName(name)];
     if (!factory) {
         const available = getAgentNames().join(', ');
-        throw new Error(`Unknown agent "${name}". Available agents: ${available}`);
+        throw new Error(`Unknown harness "${name}". Available harnesses: ${available}`);
     }
     return factory(config);
 }

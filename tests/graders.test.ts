@@ -198,7 +198,7 @@ describe('LLMGrader', () => {
     const result = await grader.grade('/workspace', provider, config, '/task', []);
 
     expect(result.score).toBe(0);
-    expect(result.details).toContain('Unknown grader provider');
+    expect(result.details).toContain('Unknown llm_provider');
   });
 
   describe('gemini provider', () => {
@@ -342,6 +342,54 @@ describe('LLMGrader', () => {
       expect(result.details).toContain('Score extracted from malformed LLM response');
 
       globalThis.fetch = originalFetch;
+    });
+  });
+
+  describe('jev provider', () => {
+    it('asks a Score question and maps the expected level onto 0–1', async () => {
+      mockPathExists.mockResolvedValue(true as any);
+      mockReadFile.mockResolvedValue('rubric content' as any);
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          model: 'jev-1.13.0',
+          answers: { rubric: { type: 'score', score: 2.25, confidence: 0.6, probabilities: { 0: 0, 1: 0.1, 2: 0.55, 3: 0.35 } } },
+        }),
+      } as any);
+
+      try {
+        const config: GraderConfig = { ...baseConfig, provider: 'jev', model: undefined };
+        const result = await grader.grade('/workspace', makeProvider(''), config, '/task', [], { JEV_API_KEY: 'test-key' });
+
+        expect(result.score).toBe(0.75);
+        expect(result.details).toContain('confidence 0.60');
+        const [url, init] = (globalThis.fetch as any).mock.calls[0];
+        expect(url).toBe('https://api.typesafe.ai/v1/systemone');
+        expect(init.headers.Authorization).toBe('Bearer test-key');
+        const body = JSON.parse(init.body);
+        expect(body.model).toBe('jev-latest');
+        expect(body.questions.rubric.type).toBe('score');
+        expect(body.questions.rubric.instructions).toContain('rubric content');
+        expect(body.questions.rubric.criteria).toHaveLength(4);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('returns score 0 without JEV_API_KEY', async () => {
+      mockPathExists.mockResolvedValue(true as any);
+      mockReadFile.mockResolvedValue('rubric content' as any);
+      const orig = process.env.JEV_API_KEY;
+      delete process.env.JEV_API_KEY;
+      try {
+        const result = await grader.grade('/workspace', makeProvider(''), { ...baseConfig, provider: 'jev' }, '/task', []);
+        expect(result.score).toBe(0);
+        expect(result.details).toContain('JEV_API_KEY');
+      } finally {
+        if (orig !== undefined) process.env.JEV_API_KEY = orig;
+      }
     });
   });
 

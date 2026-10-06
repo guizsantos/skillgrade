@@ -140,7 +140,7 @@ tasks:
     it('imports the defaults section as an object, siblings winning', async () => {
         await write('shared/defaults.yaml', `agent: command
 command: "node ./harness/run.mjs"
-provider: local
+runtime: local
 trials: 5
 `);
         await write('eval.yaml', `version: "1"
@@ -156,8 +156,8 @@ tasks:
 `);
 
         const config = await loadEvalConfig(dir);
-        expect(config.defaults.agent).toBe('command');
-        expect(config.defaults.provider).toBe('local');
+        expect(config.defaults.harness).toBe('command');
+        expect(config.defaults.runtime).toBe('local');
         expect(config.defaults.trials).toBe(1);
     });
 
