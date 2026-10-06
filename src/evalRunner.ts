@@ -66,7 +66,7 @@ export interface EvalRunOptions {
     graders: ResolvedGrader[];
     timeoutSec: number;
     graderModel?: string;       // default LLM grader model
-    graderProvider?: 'gemini' | 'anthropic' | 'openai';  // default LLM grader provider
+    graderProvider?: 'gemini' | 'anthropic' | 'openai' | 'jev';  // default LLM grader provider
     graderTimeoutSec?: number;  // timeout per grader (default: 120s)
     expected?: unknown;                     // reference output handed to graders
     metadata?: Record<string, unknown>;     // task labels handed to graders and recorded with results

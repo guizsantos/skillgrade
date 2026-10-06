@@ -89,7 +89,7 @@ function validateConfig(raw: any): EvalConfig {
     }
 
     // Validate grader_provider
-    const validGraderProviders = ['gemini', 'anthropic', 'openai'];
+    const validGraderProviders = ['gemini', 'anthropic', 'openai', 'jev'];
     if (defaults.grader_provider && !validGraderProviders.includes(defaults.grader_provider)) {
         throw new Error(`eval.yaml: grader_provider must be one of ${validGraderProviders.join(', ')}, got "${defaults.grader_provider}"`);
     }

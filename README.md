@@ -121,7 +121,7 @@ defaults:
   timeout: 300           # seconds
   threshold: 0.8         # for --ci mode
   grader_model: gemini-3-flash-preview  # default LLM grader model
-  grader_provider: gemini               # default LLM grader provider: gemini | anthropic | openai
+  grader_provider: gemini               # default LLM grader provider: gemini | anthropic | openai | jev
   command: node mycli.js # command to run when agent is 'command' (see Custom Command Agent)
   acp:                   # ACP agent configuration (optional)
     command: gemini --acp  # command to start ACP-compatible agent
@@ -155,7 +155,7 @@ tasks:
       - type: llm_rubric
         rubric: |
           Did the agent follow the check → fix → verify workflow?
-        provider: gemini                 # optional: gemini (default) | anthropic | openai
+        provider: gemini                 # optional: gemini (default) | anthropic | openai | jev
         model: gemini-3.5-flash          # optional model override
         weight: 0.3
 
@@ -332,7 +332,7 @@ Evaluates the agent's session transcript against qualitative criteria:
     Efficiency (0-0.5):
     - Completed in ≤5 commands?
   weight: 0.3
-  provider: gemini           # gemini (default) | anthropic | openai
+  provider: gemini           # gemini (default) | anthropic | openai | jev
   model: gemini-2.0-flash    # optional, auto-detected from API key
 ```
 
@@ -343,8 +343,11 @@ The `provider` field selects which LLM API to call:
 | `gemini`   | `GEMINI_API_KEY`    | -                           | Dynamically resolved latest Flash model (via API) |
 | `anthropic`| `ANTHROPIC_API_KEY` | `ANTHROPIC_BASE_URL`        | Dynamically resolved latest Haiku model (via API) |
 | `openai`   | `OPENAI_API_KEY`    | `OPENAI_BASE_URL`           | Dynamically resolved latest Mini/Flash model (via API) |
+| `jev`      | `JEV_API_KEY`       | `JEV_BASE_URL`              | `jev-latest` |
 
 `ANTHROPIC_BASE_URL` and `OPENAI_BASE_URL` enable custom/self-hosted endpoints (Ollama, vLLM, etc.). They apply to both LLM grading and `skillgrade init`.
+
+[Jev](https://docs.typesafe.ai/introduction) is a scoring model, not a chat model: it rates the session against four levels (fails, partially, mostly, fully meets the rubric) and the expected level becomes the score. It gives no written reasoning; the grader's details show the level, the probability of each level, and Jev's confidence.
 
 ### Combining Graders
 
@@ -385,6 +388,8 @@ Exits with code 1 if pass rate falls below `--threshold` (default: 0.8).
 | `OPENAI_API_KEY` | Agent execution (Codex), LLM grading (`provider: openai`), `skillgrade init` |
 | `ANTHROPIC_BASE_URL` | LLM grading (`provider: anthropic`), `skillgrade init` — custom Anthropic-compatible endpoint |
 | `OPENAI_BASE_URL` | LLM grading (`provider: openai`), `skillgrade init` — custom OpenAI-compatible endpoint (Ollama, vLLM, etc.) |
+| `JEV_API_KEY` | LLM grading (`provider: jev`) |
+| `JEV_BASE_URL` | LLM grading (`provider: jev`) — defaults to `https://api.typesafe.ai/v1` |
 | `GEMINI_MODEL` | Override the default model used for Gemini LLM grading (defaults to dynamic API lookup; throws if resolution fails) |
 | `INIT_GEMINI_MODEL` | Override the model used for Gemini in `skillgrade init` (defaults to `GEMINI_MODEL` or dynamic API lookup; throws if resolution fails) |
 | `ANTHROPIC_MODEL` | Override the default model used for Anthropic LLM grading (defaults to dynamic API lookup; throws if resolution fails) |

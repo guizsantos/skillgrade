@@ -19,7 +19,7 @@ export interface EvalGraderConfig {
     run?: string;                                 // inline script or file path (deterministic)
     rubric?: string;                              // inline rubric or file path (llm_rubric)
     model?: string;                               // model override, e.g. 'claude-sonnet-5' or 'gemini-3-flash-preview'
-    provider?: 'gemini' | 'anthropic' | 'openai'; // which LLM API to call (default: 'gemini')
+    provider?: 'gemini' | 'anthropic' | 'openai' | 'jev'; // which LLM API to call (default: 'gemini')
     weight: number;
 }
 
@@ -73,7 +73,7 @@ export interface EvalTaskConfig {
     trials?: number;
     timeout?: number;
     grader_model?: string;
-    grader_provider?: 'gemini' | 'anthropic' | 'openai';
+    grader_provider?: 'gemini' | 'anthropic' | 'openai' | 'jev';
     docker?: DockerConfig;
     environment?: Partial<EnvironmentConfig>;
 
@@ -91,7 +91,7 @@ export interface EvalDefaults {
     timeout: number;
     threshold: number;  // for --ci mode
     grader_model?: string;      // default LLM grader model
-    grader_provider?: 'gemini' | 'anthropic' | 'openai';  // default LLM grader provider
+    grader_provider?: 'gemini' | 'anthropic' | 'openai' | 'jev';  // default LLM grader provider
     acp?: AcpConfig;    // ACP agent configuration
     docker: DockerConfig;
     environment: EnvironmentConfig;
@@ -121,7 +121,7 @@ export interface ResolvedTask {
     trials: number;
     timeout: number;
     grader_model?: string;                                      // inherited default model for LLM graders
-    grader_provider?: 'gemini' | 'anthropic' | 'openai';        // inherited default provider for LLM graders
+    grader_provider?: 'gemini' | 'anthropic' | 'openai' | 'jev';        // inherited default provider for LLM graders
     acp?: AcpConfig;        // ACP agent configuration
     docker: DockerConfig;
     environment: EnvironmentConfig;
@@ -135,6 +135,6 @@ export interface ResolvedGrader {
     run?: string;                                 // resolved content for deterministic
     rubric?: string;                              // resolved content for llm_rubric
     model?: string;                               // resolved model override
-    provider?: 'gemini' | 'anthropic' | 'openai'; // which LLM API to call (default: 'gemini')
+    provider?: 'gemini' | 'anthropic' | 'openai' | 'jev'; // which LLM API to call (default: 'gemini')
     weight: number;
 }

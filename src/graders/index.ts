@@ -92,6 +92,7 @@ export class DeterministicGrader implements Grader {
  *   - gemini      → Google Gemini (GEMINI_API_KEY)
  *   - anthropic   → Anthropic Claude or compatible (ANTHROPIC_API_KEY; optional ANTHROPIC_BASE_URL)
  *   - openai      → OpenAI or compatible (OPENAI_API_KEY; optional OPENAI_BASE_URL for Ollama, vLLM, etc.)
+ *   - jev         → TypeSafe's Jev, a scoring model (JEV_API_KEY; optional JEV_BASE_URL)
  *
  * Each provider method resolves its own API key, makes the HTTP call, and
  * handles errors — returning a zero-score GraderResult on any failure.
@@ -178,6 +179,8 @@ ${transcript}
 Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explanation>"}`;
 
         const providerName = config.provider || 'gemini';
+        // Jev scores against levels instead of following a prompt: no judge preamble, no model to resolve
+        if (providerName === 'jev') return this.callJev(rubric, transcript + expectedSection, config, env);
         let model = config.model;
         if (!model) {
             try {
@@ -188,7 +191,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                 } else if (providerName === 'openai') {
                     model = await resolveOpenAIModel(env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY, env, 'grader');
                 } else {
-                    throw new Error(`Unknown grader provider: "${providerName}". Supported: gemini, anthropic, openai`);
+                    throw new Error(`Unknown grader provider: "${providerName}". Supported: gemini, anthropic, openai, jev`);
                 }
             } catch (err: any) {
                 return {
@@ -212,7 +215,7 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
                     grader_type: 'llm_rubric',
                     score: 0,
                     weight: config.weight,
-                    details: `Unknown grader provider: "${providerName}". Supported: gemini, anthropic, openai`,
+                    details: `Unknown grader provider: "${providerName}". Supported: gemini, anthropic, openai, jev`,
                 };
         }
     }
@@ -355,6 +358,56 @@ Respond with ONLY a JSON object: {"score": <number>, "reasoning": "<brief explan
             return result;
         } catch (e) {
             return { grader_type: 'llm_rubric', score: 0, weight: config.weight, details: `OpenAI API error: ${e}` };
+        }
+    }
+
+    /**
+     * TypeSafe's Jev (https://docs.typesafe.ai/api): a Score question rates the session
+     * against ordered levels and returns the expected level, not text. It gives no
+     * reasoning, so `details` carries the level probabilities and confidence instead.
+     */
+    private async callJev(rubric: string, state: string, config: GraderConfig, env?: Record<string, string>): Promise<GraderResult> {
+        const apiKey = env?.JEV_API_KEY || process.env.JEV_API_KEY;
+        if (!apiKey) {
+            return {
+                grader_type: 'llm_rubric',
+                score: 0,
+                weight: config.weight,
+                details: 'Missing JEV_API_KEY. Set the JEV_API_KEY environment variable to use the "jev" grader provider.'
+            };
+        }
+        const baseUrl = (env?.JEV_BASE_URL || process.env.JEV_BASE_URL || 'https://api.typesafe.ai/v1').replace(/\/+$/, '');
+        // ponytail: a fixed ladder; per-grader levels (`criteria:`) when evals need their own
+        const criteria = ['Fails the rubric', 'Partially meets the rubric', 'Mostly meets the rubric', 'Fully meets the rubric'];
+
+        try {
+            const response = await fetch(`${baseUrl}/systemone`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                body: JSON.stringify({
+                    state,
+                    // a suite-wide grader_model names another provider's model; Jev's are jev-*
+                    model: config.model?.startsWith('jev') ? config.model : 'jev-latest',
+                    questions: { rubric: { type: 'score', instructions: `How well does this agent session meet the rubric?\n\n${rubric}`, criteria } },
+                }),
+            });
+
+            if (!response.ok) return this.httpError('Jev', response, config);
+
+            const data = await response.json() as any;
+            const a = data?.answers?.rubric;
+            if (typeof a?.score !== 'number') {
+                return { grader_type: 'llm_rubric', score: 0, weight: config.weight, details: `Failed to parse Jev response: ${JSON.stringify(data).substring(0, 300)}` };
+            }
+            const p = Object.entries(a.probabilities || {}).map(([k, v]) => `${k}=${Number(v).toFixed(2)}`).join(' ');
+            return {
+                grader_type: 'llm_rubric',
+                score: Math.max(0, Math.min(1, a.score / (criteria.length - 1))),
+                weight: config.weight,
+                details: `${data.model || 'jev'}: level ${a.score.toFixed(2)} of ${criteria.length - 1}, confidence ${Number(a.confidence).toFixed(2)} (p: ${p})`,
+            };
+        } catch (e) {
+            return { grader_type: 'llm_rubric', score: 0, weight: config.weight, details: `Jev API error: ${e}` };
         }
     }
 
