@@ -13,6 +13,7 @@ import { DockerProvider } from '../providers/docker';
 import { LocalProvider } from '../providers/local';
 import { EvalRunner, EvalRunOptions } from '../evalRunner';
 import { createAgent, AgentConfig, harnessName } from '../agents/registry';
+import { capabilitiesOf } from '../agents/capabilities';
 import { BaseAgent, EvalReport } from '../types';
 import { EvalConfig, EvalTaskConfig, ResolvedTask } from '../core/config.types';
 import { parseEnvFile } from '../utils/env';
@@ -174,7 +175,8 @@ export async function runEvals(dir: string, opts: RunOptions) {
             taskIndex++;
             const { config, resource } = target;
             const evalDir = resource.evalDir;
-            const skillsPaths = [resource.dir];
+            // Only a Skill is discovered from a skills directory; Project Instructions are a file in the workspace
+            const skillsPaths = resource.kind === 'skill' ? [resource.dir] : [];
             const outputDir = path.join(outputBase, resource.name);
             const resultsDir = path.join(outputDir, 'results');
             await fs.ensureDir(resultsDir);
@@ -208,6 +210,10 @@ export async function runEvals(dir: string, opts: RunOptions) {
             const tmpTaskDir = path.join(outputDir, 'tmp', resolved.name);
             const tmpGraderDir = path.join(outputDir, 'tmp-graders', resolved.name);
             await prepareTempTaskDir(resolved, evalDir, tmpTaskDir, tmpGraderDir);
+            if (resource.kind === 'instructions') {
+                // Copied as is, under the name this Harness loads, so it actually applies
+                await fs.copy(path.join(resource.dir, 'AGENTS.md'), path.join(tmpTaskDir, capabilitiesOf(agentName).instructionFile));
+            }
 
             // Build eval options — pass resolved content directly
             const evalOpts: EvalRunOptions = {

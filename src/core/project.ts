@@ -16,15 +16,17 @@ import { EVAL_FILE, LEGACY_EVAL_FILE } from './config';
 
 export const PROJECT_FILE = 'eval-project.yml';
 
-export type ResourceKind = 'skill';
+export type ResourceKind = 'skill' | 'instructions';
 
 /**
  * The kinds a project can hold. The key is both the `search_paths` key and the
  * eval directory's name in the project; `marker` is the file that makes a
- * directory in a search path a resource of that kind.
+ * directory in a search path a resource of that kind. `frontmatterName` is
+ * whether the marker carries a `name:` that must equal the directory's name.
  */
-const KINDS: Record<string, { kind: ResourceKind; marker: string }> = {
-    skills: { kind: 'skill', marker: 'SKILL.md' },
+const KINDS: Record<string, { kind: ResourceKind; marker: string; frontmatterName: boolean }> = {
+    skills: { kind: 'skill', marker: 'SKILL.md', frontmatterName: true },
+    instructions: { kind: 'instructions', marker: 'AGENTS.md', frontmatterName: false },
 };
 
 export interface Project {
@@ -118,7 +120,7 @@ export async function testedResources(project: Project): Promise<Resource[]> {
 /** Every resource in the search paths, named by its directory; fails on a name that does not match its frontmatter. */
 async function findResources(project: Project): Promise<Omit<Resource, 'evalDir'>[]> {
     const found: Omit<Resource, 'evalDir'>[] = [];
-    for (const [key, { kind, marker }] of Object.entries(KINDS)) {
+    for (const [key, { kind, marker, frontmatterName }] of Object.entries(KINDS)) {
         for (const searchPath of project.searchPaths[key] || []) {
             const entries = await fs.readdir(searchPath, { withFileTypes: true });
             for (const entry of entries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -126,7 +128,7 @@ async function findResources(project: Project): Promise<Omit<Resource, 'evalDir'
                 const markerFile = path.join(dir, marker);
                 if (!await fs.pathExists(markerFile)) continue;
 
-                checkName(markerFile, entry.name, await fs.readFile(markerFile, 'utf-8'));
+                if (frontmatterName) checkName(markerFile, entry.name, await fs.readFile(markerFile, 'utf-8'));
                 const twin = found.find(r => r.kind === kind && r.name === entry.name);
                 if (twin) {
                     throw new Error(`Two ${kind}s are named "${entry.name}": ${twin.dir} and ${dir}. Names are unique within a kind`);
