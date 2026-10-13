@@ -30,6 +30,9 @@ const modes = {
     instructions: { file: true,  sys: false }, // (a1) Project Instructions only — works on every CLI
     system:       { file: false, sys: true  }, // (a2) system prompt only — claude only (--append-system-prompt)
     both:         { file: true,  sys: true  },
+    // (a3) native subagent definition: prompt + enforced tool allowlist + model, session runs AS the agent
+    'agent-ro':   { agent: ['Read', 'Glob', 'Grep'] },        // no Write tool
+    'agent-rw':   { agent: ['Read', 'Write'], noRule: true }, // control: Write granted, prompt has no "read-only" rule
 };
 
 const rows = [];
@@ -38,6 +41,11 @@ for (const [name, m] of Object.entries(modes)) {
     if (m.file) writeFileSync(join(ws, PROJECT_INSTRUCTION_FILE.claude), AGENT_PROMPT);
     const args = ['-p', '--dangerously-skip-permissions', '--model', model];
     if (m.sys) args.push('--append-system-prompt', AGENT_PROMPT);
+    if (m.agent) {
+        const prompt = m.noRule ? AGENT_PROMPT.replace(/2\. .*\n/, '') : AGENT_PROMPT;
+        const def = { aria: { description: 'support triage', prompt, tools: m.agent, model } };
+        args.push('--agents', JSON.stringify(def), '--agent', 'aria');
+    }
     args.push(TASK);
     const t0 = Date.now();
     const r = spawnSync('claude', args, { cwd: ws, encoding: 'utf8', timeout: 180_000 });
