@@ -42,7 +42,11 @@ export const LEGACY_EVAL_FILE = 'eval.yaml';
  * Load and parse a resource's eval.yml from its eval directory. The Eval
  * Project's `defaults` sit underneath the eval's own.
  */
-export async function loadEvalConfig(evalDir: string, projectDefaults: Record<string, any> = {}): Promise<EvalConfig> {
+export async function loadEvalConfig(
+    evalDir: string,
+    projectDefaults: Record<string, any> = {},
+    opts: { instructionRequired?: boolean } = {},
+): Promise<EvalConfig> {
     const legacy = path.join(evalDir, LEGACY_EVAL_FILE);
     if (await fs.pathExists(legacy)) {
         throw new Error(`${legacy}: eval.yaml is no longer supported. Rename it to ${EVAL_FILE}, move it to <eval project>/<kind>/<name>/, and drop the \`skill:\` and \`workspace:\` keys (see docs).`);
@@ -58,7 +62,7 @@ export async function loadEvalConfig(evalDir: string, projectDefaults: Record<st
         raw.defaults = mergeDefaults(projectDefaults, raw.defaults);
     }
 
-    return validateConfig(raw);
+    return validateConfig(raw, opts.instructionRequired ?? true);
 }
 
 /** `own` over `base`, one level deeper for the nested settings. */
@@ -99,7 +103,7 @@ function renameLegacyKeys(obj: any, renames: Record<string, string>, where: stri
 /**
  * Validate raw parsed YAML into a typed EvalConfig.
  */
-function validateConfig(raw: any): EvalConfig {
+function validateConfig(raw: any, instructionRequired: boolean): EvalConfig {
     if (!raw || typeof raw !== 'object') {
         throw new Error('eval.yml must be a YAML object');
     }
@@ -156,7 +160,10 @@ function validateConfig(raw: any): EvalConfig {
 
     const tasks: EvalTaskConfig[] = raw.tasks.map((t: any, i: number) => {
         if (!t.name) throw new Error(`Task ${i} is missing a "name"`);
-        if (!t.instruction) throw new Error(`Task "${t.name}" is missing an "instruction"`);
+        if (!t.instruction && instructionRequired) throw new Error(`Task "${t.name}" is missing an "instruction"`);
+        if (t.variables !== undefined && (typeof t.variables !== 'object' || t.variables === null || Array.isArray(t.variables))) {
+            throw new Error(`Task "${t.name}" has "variables" that is not an object: it maps each {{placeholder}} of the Prompt to its value`);
+        }
         if (!t.graders || !Array.isArray(t.graders) || t.graders.length === 0) {
             throw new Error(`Task "${t.name}" must have at least one grader`);
         }
@@ -186,6 +193,7 @@ function validateConfig(raw: any): EvalConfig {
         return {
             name: t.name,
             instruction: t.instruction,
+            variables: t.variables,
             graders: t.graders.map((g: any) => {
                 if (g.llm_provider && !VALID_LLM_PROVIDERS.includes(g.llm_provider)) {
                     throw new Error(`Task "${t.name}" grader has invalid llm_provider "${g.llm_provider}", must be one of ${VALID_LLM_PROVIDERS.join(', ')}`);
@@ -255,7 +263,7 @@ export async function resolveTask(
     ])];
 
     // Resolve instruction — could be inline text or file path
-    const instruction = await resolveFileOrInline(task.instruction, baseDirs);
+    const instruction = task.instruction ? await resolveFileOrInline(task.instruction, baseDirs) : '';
 
     // Resolve graders
     const graders: ResolvedGrader[] = await Promise.all(

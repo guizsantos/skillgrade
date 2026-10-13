@@ -16,20 +16,23 @@ import { EVAL_FILE, LEGACY_EVAL_FILE } from './config';
 
 export const PROJECT_FILE = 'eval-project.yml';
 
-export type ResourceKind = 'skill';
+export type ResourceKind = 'skill' | 'prompt';
 
 /**
  * The kinds a project can hold. The key is both the `search_paths` key and the
- * eval directory's name in the project; `marker` is the file that makes a
- * directory in a search path a resource of that kind.
+ * eval directory's name in the project. A resource is either a directory
+ * holding `marker`, or a single `<name>.<ext>` file.
  */
-const KINDS: Record<string, { kind: ResourceKind; marker: string }> = {
+const KINDS: Record<string, { kind: ResourceKind } & ({ marker: string } | { ext: string })> = {
     skills: { kind: 'skill', marker: 'SKILL.md' },
+    prompts: { kind: 'prompt', ext: '.md' },
 };
 
 export interface Project {
     dir: string;
     defaults: Record<string, any>;
+    /** Project-wide Prompt variables; a task's own values override them. */
+    variables: Record<string, unknown>;
     /** Absolute search paths per kind key. */
     searchPaths: Record<string, string[]>;
 }
@@ -38,7 +41,7 @@ export interface Project {
 export interface Resource {
     kind: ResourceKind;
     name: string;
-    /** The resource itself, in one of the search paths. */
+    /** The resource itself, in one of the search paths: a directory, or the file of a Prompt. */
     dir: string;
     /** Its directory in the Eval Project: eval.yml, graders/, workspace/. */
     evalDir: string;
@@ -76,7 +79,11 @@ export async function loadProject(dir: string): Promise<Project> {
         }
     }
 
-    return { dir, defaults: raw.defaults ?? {}, searchPaths };
+    if (raw.variables !== undefined && (typeof raw.variables !== 'object' || raw.variables === null || Array.isArray(raw.variables))) {
+        throw new Error(`${PROJECT_FILE}: variables must be an object mapping each {{placeholder}} to its value`);
+    }
+
+    return { dir, defaults: raw.defaults ?? {}, variables: raw.variables ?? {}, searchPaths };
 }
 
 /** The Eval Project defaults for the eval in `evalDir` (<project>/<kind>/<name>); none when it is not in a loadable project. */
@@ -118,35 +125,53 @@ export async function testedResources(project: Project): Promise<Resource[]> {
 /** Every resource in the search paths, named by its directory; fails on a name that does not match its frontmatter. */
 async function findResources(project: Project): Promise<Omit<Resource, 'evalDir'>[]> {
     const found: Omit<Resource, 'evalDir'>[] = [];
-    for (const [key, { kind, marker }] of Object.entries(KINDS)) {
+    for (const [key, spec] of Object.entries(KINDS)) {
+        const { kind } = spec;
         for (const searchPath of project.searchPaths[key] || []) {
-            const entries = await fs.readdir(searchPath, { withFileTypes: true });
-            for (const entry of entries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
-                const dir = path.join(searchPath, entry.name);
-                const markerFile = path.join(dir, marker);
-                if (!await fs.pathExists(markerFile)) continue;
-
-                checkName(markerFile, entry.name, await fs.readFile(markerFile, 'utf-8'));
-                const twin = found.find(r => r.kind === kind && r.name === entry.name);
-                if (twin) {
-                    throw new Error(`Two ${kind}s are named "${entry.name}": ${twin.dir} and ${dir}. Names are unique within a kind`);
+            const entries = (await fs.readdir(searchPath, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+            for (const entry of entries) {
+                // A directory holding the marker file, or a file with the extension: named by its directory or file name
+                let name: string, dir: string, nameFile: string, named: 'directory' | 'file';
+                if ('marker' in spec) {
+                    if (!entry.isDirectory()) continue;
+                    name = entry.name;
+                    dir = path.join(searchPath, entry.name);
+                    nameFile = path.join(dir, spec.marker);
+                    named = 'directory';
+                    if (!await fs.pathExists(nameFile)) continue;
+                } else {
+                    if (!entry.isFile() || !entry.name.endsWith(spec.ext)) continue;
+                    name = entry.name.slice(0, -spec.ext.length);
+                    dir = nameFile = path.join(searchPath, entry.name);
+                    named = 'file';
                 }
-                found.push({ kind, name: entry.name, dir });
+
+                checkName(nameFile, name, named, await fs.readFile(nameFile, 'utf-8'));
+                const twin = found.find(r => r.kind === kind && r.name === name);
+                if (twin) {
+                    throw new Error(`Two ${kind}s are named "${name}": ${twin.dir} and ${dir}. Names are unique within a kind`);
+                }
+                found.push({ kind, name, dir });
             }
         }
     }
     return found;
 }
 
-/** The frontmatter `name:` is required and must be the directory's name. */
-function checkName(file: string, dirName: string, content: string) {
+/** The frontmatter `name:` is required and must be the resource's name (its directory's, or its file's without the extension). */
+function checkName(file: string, resourceName: string, named: 'directory' | 'file', content: string) {
     const name = frontmatter(content).name;
     if (name === undefined || name === null || name === '') {
-        throw new Error(`${file}: the frontmatter needs "name: ${dirName}" (the directory's name)`);
+        throw new Error(`${file}: the frontmatter needs "name: ${resourceName}" (the ${named}'s name)`);
     }
-    if (String(name) !== dirName) {
-        throw new Error(`${file}: frontmatter name "${name}" does not match its directory name "${dirName}". Rename one so they agree`);
+    if (String(name) !== resourceName) {
+        throw new Error(`${file}: frontmatter name "${name}" does not match its ${named} name "${resourceName}". Rename one so they agree`);
     }
+}
+
+/** A file's content without its frontmatter. */
+export function promptBody(content: string): string {
+    return content.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/, '');
 }
 
 function frontmatter(content: string): Record<string, unknown> {

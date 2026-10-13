@@ -6,9 +6,10 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { interpolate, MissingVariablesError } from '../core/interpolate';
 import { EVAL_FILE, loadEvalConfig, resolveTask } from '../core/config';
 import { TaskFilter, describeSelection, metadataKeys, selectTasks } from '../core/filter';
-import { PROJECT_FILE, Resource, loadProject, testedResources } from '../core/project';
+import { PROJECT_FILE, Resource, loadProject, promptBody, testedResources } from '../core/project';
 import { DockerProvider } from '../providers/docker';
 import { LocalProvider } from '../providers/local';
 import { EvalRunner, EvalRunOptions } from '../evalRunner';
@@ -51,6 +52,8 @@ interface Target {
     resource: Resource;
     config: EvalConfig;
     tasks: EvalTaskConfig[];
+    /** For a Prompt: each selected task's rendered Prompt, ready for the agent. */
+    prompts: Map<EvalTaskConfig, string>;
 }
 
 async function loadEnvFile(filePath: string): Promise<Record<string, string>> {
@@ -174,12 +177,17 @@ export async function runEvals(dir: string, opts: RunOptions) {
             taskIndex++;
             const { config, resource } = target;
             const evalDir = resource.evalDir;
-            const skillsPaths = [resource.dir];
+            // A Prompt is delivered as what the agent is asked, not as a file in its workspace
+            const skillsPaths = resource.kind === 'skill' ? [resource.dir] : [];
             const outputDir = path.join(outputBase, resource.name);
             const resultsDir = path.join(outputDir, 'results');
             await fs.ensureDir(resultsDir);
 
             const resolved = await resolveTask(taskDef, config.defaults, evalDir);
+            const rendered = target.prompts.get(taskDef);
+            if (rendered !== undefined) {
+                resolved.instruction = resolved.instruction ? `${rendered}\n\n${resolved.instruction}` : rendered;
+            }
             const trials = opts.trials ?? resolved.trials;
             const parallel = opts.parallel ?? 1;
 
@@ -387,14 +395,15 @@ async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
     const targets: Target[] = [];
     const errors: unknown[] = [];
     for (const resource of resources) {
-        const config = await loadEvalConfig(resource.evalDir, project.defaults);
+        const config = await loadEvalConfig(resource.evalDir, project.defaults, { instructionRequired: resource.kind !== 'prompt' });
         try {
-            targets.push({ resource, config, tasks: selectTasks(config.tasks, selection) });
+            const tasks = selectTasks(config.tasks, selection);
+            targets.push({ resource, config, tasks, prompts: await renderPrompts(resource, tasks, project.variables) });
         } catch (err) {
             // Only "no task by that name here" may pass: a bad filter or pattern is wrong everywhere
             if (!(err instanceof Error && /^Eval ".*" not found$/.test(err.message))) throw err;
             errors.push(err);
-            targets.push({ resource, config, tasks: [] });
+            targets.push({ resource, config, tasks: [], prompts: new Map() });
         }
     }
     if (errors.length === targets.length) {
@@ -407,6 +416,27 @@ async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
         throw err;
     }
     return { targets };
+}
+
+/**
+ * Render a Prompt for each selected task: the project's variables under the
+ * task's own. Done for every task up front, so a missing value stops the run
+ * before any trial. Other kinds have nothing to render.
+ */
+async function renderPrompts(resource: Resource, tasks: EvalTaskConfig[], projectVariables: Record<string, unknown>) {
+    const prompts = new Map<EvalTaskConfig, string>();
+    if (resource.kind !== 'prompt') return prompts;
+
+    const template = promptBody(await fs.readFile(resource.dir, 'utf-8'));
+    for (const task of tasks) {
+        try {
+            prompts.set(task, interpolate(template, { ...projectVariables, ...task.variables }).trimEnd());
+        } catch (err) {
+            if (!(err instanceof MissingVariablesError)) throw err;
+            throw new Error(`Prompt "${resource.name}", task "${task.name}": ${err.message}. Give it a value under the task's variables:, or project-wide under variables: in ${PROJECT_FILE}`);
+        }
+    }
+    return prompts;
 }
 
 /** Every file a run reads that git tracks: the project, its evals and their imports, the resources. */

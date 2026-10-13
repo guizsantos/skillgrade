@@ -42,9 +42,12 @@ export interface AcpConfig {
 /** Single eval task */
 export interface EvalTaskConfig {
     name: string;
-    instruction: string;    // inline text or path to .md file
+    instruction?: string;   // inline text or path to .md file; optional only for a Prompt eval
     graders: EvalGraderConfig[];
     solution?: string;      // path to reference solution script
+
+    /** Values for the `{{placeholders}}` of a Prompt, over the project-wide ones. */
+    variables?: Record<string, unknown>;
 
     /**
      * Reference output for this task — the row's answer key. Reaches graders
@@ -102,7 +105,7 @@ export interface EvalConfig {
 /** Resolved task — all defaults applied, file references resolved to content */
 export interface ResolvedTask {
     name: string;
-    instruction: string;    // actual content (not file path)
+    instruction: string;    // actual content (not file path); empty when a Prompt eval's task has none
     /** The folder named after the task under the eval's `workspace/`, if there is one; copied into the agent's workspace. */
     workspaceDir?: string;
     graders: ResolvedGrader[];
