@@ -18,6 +18,7 @@ import { EvalConfig, EvalTaskConfig, ResolvedTask } from '../core/config.types';
 import { parseEnvFile } from '../utils/env';
 import { gitProvenance, headWorktree, pruneWorktrees, repoRoot, uncommitted } from '../core/provenance';
 import { importedFiles } from '../core/imports';
+import { appendTrialRecords, buildTrialRecords, deliveryFor, harnessVersion } from '../core/trialRecords';
 import { fmt, header, kv, progress, resultsSummary, validationResult } from '../utils/cli';
 
 /** Agents that accept a model on the command line. */
@@ -166,6 +167,9 @@ export async function runEvals(dir: string, opts: RunOptions) {
 
         // Agents whose CLI takes a model; the rest ignore --model and are told so.
         const warnedNoModelSupport = new Set<string>();
+
+        // Each Harness's version is read once per run, however many tasks use it
+        const harnessVersions = new Map<string, string>();
 
         // Run each task of each resource
         const jobs = targets.flatMap(target => target.tasks.map(taskDef => ({ target, taskDef })));
@@ -321,6 +325,18 @@ export async function runEvals(dir: string, opts: RunOptions) {
                 try {
                     const report = await runner.runEval(agent, tmpTaskDir, skillsPaths, evalOpts, trials, env, parallel);
                     reports.push(report);
+
+                    // One Trial Record per trial, beside the report
+                    if (!harnessVersions.has(agentName)) harnessVersions.set(agentName, harnessVersion(agentName, providerName));
+                    await appendTrialRecords(resultsDir, report.provenance!.run_id, buildTrialRecords(report, {
+                        resource,
+                        provenance: report.provenance!,
+                        harness: agentName,
+                        harnessVersion: harnessVersions.get(agentName)!,
+                        llm: modelName,
+                        delivery: deliveryFor(resource.kind),
+                        date: now,
+                    }));
 
                     // LLM grader reasoning (condensed)
                     for (const trial of report.trials) {
