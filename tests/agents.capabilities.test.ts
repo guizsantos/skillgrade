@@ -43,9 +43,11 @@ describe('Harness capability table', () => {
             for (const row of Object.values(HARNESS_CAPABILITIES)) {
                 expect(Array.isArray(row.supportedKeys)).toBe(true);
             }
-            expect(capabilitiesOf('claude-code').supportedKeys).toContain('tools');
-            expect(capabilitiesOf('opencode').supportedKeys).toContain('temperature');
-            expect(capabilitiesOf('claude-code').supportedKeys).not.toContain('temperature');
+            expect(capabilitiesOf('claude-code').supportedKeys).toEqual(['description', 'tools', 'disallowedTools', 'model', 'permissionMode', 'maxTurns', 'skills', 'mcpServers', 'hooks']);
+            expect(capabilitiesOf('opencode').supportedKeys).toEqual(['description', 'mode', 'model', 'temperature', 'top_p', 'steps', 'tools', 'permission']);
+            for (const h of ['codex', 'gemini-cli', 'acp', 'command']) {
+                expect(capabilitiesOf(h).supportedKeys).toEqual(['description']);
+            }
         });
 
         it('reports the keys a Harness does not support, in the definition order', () => {

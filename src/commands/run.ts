@@ -165,10 +165,11 @@ export async function runEvals(dir: string, opts: RunOptions) {
 
         // Before any trial: definitions the Harness only partly understands stop the run, unless forced.
         // --validate runs no agent, so there is nothing for a Harness to ignore.
-        const ignoredKeys = opts.validate ? new Map<string, string[]>() : await compatibilityGate(targets, opts, env);
-        for (const [id, keys] of ignoredKeys) {
-            const [name, harness] = id.split('|');
-            console.error(`  ${fmt.red('warning')}  --force: ${name} in harness ${harness} ignores ${keys.join(', ')}; recorded as degraded`);
+        const ignoredKeys = opts.validate ? new Map<string, Map<string, string[]>>() : await compatibilityGate(targets, opts, env);
+        for (const [name, byHarness] of ignoredKeys) {
+            for (const [harness, keys] of byHarness) {
+                console.error(`  ${fmt.red('warning')}  --force: ${name} in harness ${harness} ignores ${keys.join(', ')}; recorded as degraded`);
+            }
         }
 
         // Track CI results
@@ -353,7 +354,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
                         harness: agentName,
                         harnessVersion: harnessVersions.get(versionKey)!,
                         llm: agentConfig.opencode?.model ?? modelName,
-                        delivery: deliveryFor(resource.kind, agentName, ignoredKeys.get(ignoredKey(resource, agentName))),
+                        delivery: deliveryFor(resource.kind, agentName, ignoredKeys.get(resource.name)?.get(agentName)),
                         date: now,
                     }));
 
@@ -417,12 +418,12 @@ function pickHarness(opts: RunOptions, taskDef: EvalTaskConfig, resolved: Resolv
 
 /**
  * The compatibility gate: before any trial, each Agent Definition's keys are
- * compared with what its Harness supports. Returns the unsupported keys per
- * `resource|harness` (empty entries left out) and throws, naming them all,
+ * compared with what its Harness supports. Returns the unsupported keys by
+ * resource name, then Harness (none left out) and throws, naming them all,
  * unless `--force` accepts the gap.
  */
-async function compatibilityGate(targets: Target[], opts: RunOptions, env: Record<string, string>): Promise<Map<string, string[]>> {
-    const ignored = new Map<string, string[]>();
+async function compatibilityGate(targets: Target[], opts: RunOptions, env: Record<string, string>): Promise<Map<string, Map<string, string[]>>> {
+    const ignored = new Map<string, Map<string, string[]>>();
     const stops: string[] = [];
     for (const { resource, config, tasks } of targets) {
         if (resource.kind !== 'agent') continue;
@@ -430,19 +431,16 @@ async function compatibilityGate(targets: Target[], opts: RunOptions, env: Recor
         for (const taskDef of tasks) {
             const resolved = await resolveTask(taskDef, config.defaults, resource.evalDir);
             const harness = pickHarness(opts, taskDef, resolved, env);
-            const id = ignoredKey(resource, harness);
-            if (ignored.has(id)) continue;
+            const byHarness = ignored.get(resource.name) ?? new Map<string, string[]>();
             const unsupported = unsupportedKeys(harness, keys);
-            if (!unsupported.length) continue;
-            ignored.set(id, unsupported);
+            if (!unsupported.length || byHarness.has(harness)) continue;
+            ignored.set(resource.name, byHarness.set(harness, unsupported));
             stops.push(`Running eval for ${resource.name} in harness ${harness} with ${unsupported.join(', ')} keys unsupported; run with --force to continue`);
         }
     }
     if (stops.length && !opts.force) throw new Error(stops.join('\n'));
     return ignored;
 }
-
-const ignoredKey = (resource: Resource, harness: string) => `${resource.name}|${harness}`;
 
 /** The Eval Project's resources with an eval, and the tasks of each that the selection picks. */
 async function loadSuite(dir: string, opts: RunOptions, log: boolean) {

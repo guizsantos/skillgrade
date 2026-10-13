@@ -129,7 +129,7 @@ async function findResources(project: Project): Promise<Omit<Resource, 'evalDir'
     for (const [key, { kind, marker, frontmatterName, file }] of Object.entries(KINDS)) {
         for (const searchPath of project.searchPaths[key] || []) {
             const entries = await fs.readdir(searchPath, { withFileTypes: true });
-            const candidates = entries.filter(e => file ? e.isFile() && e.name.endsWith(marker) : e.isDirectory());
+            const candidates = entries.filter(e => file ? e.isFile() && e.name.endsWith(marker) && e.name !== 'README.md' : e.isDirectory());
             for (const entry of candidates.sort((a, b) => a.name.localeCompare(b.name))) {
                 const name = file ? entry.name.slice(0, -marker.length) : entry.name;
                 const dir = path.join(searchPath, entry.name);
@@ -149,13 +149,13 @@ async function findResources(project: Project): Promise<Omit<Resource, 'evalDir'
 }
 
 /** The frontmatter `name:` is required and must be the resource's name: its directory's, or its file's without `.md`. */
-function checkName(file: string, dirName: string, content: string) {
+function checkName(file: string, resourceName: string, content: string) {
     const name = frontmatter(content).name;
     if (name === undefined || name === null || name === '') {
-        throw new Error(`${file}: the frontmatter needs "name: ${dirName}" (the directory's name)`);
+        throw new Error(`${file}: the frontmatter needs "name: ${resourceName}" (the directory's name)`);
     }
-    if (String(name) !== dirName) {
-        throw new Error(`${file}: frontmatter name "${name}" does not match its directory name "${dirName}". Rename one so they agree`);
+    if (String(name) !== resourceName) {
+        throw new Error(`${file}: frontmatter name "${name}" does not match its directory name "${resourceName}". Rename one so they agree`);
     }
 }
 
