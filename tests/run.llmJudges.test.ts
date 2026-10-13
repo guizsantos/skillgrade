@@ -62,6 +62,15 @@ describe('reusable LLM judges (llm_judge: name)', () => {
         expect(await fx.ran()).toBe(false);
     });
 
+    it('rejects an empty judge before any trial', async () => {
+        const fx = await evalProject(ctx => ({
+            ...greeterProject(fakeAgent({ record: ctx.record }), [judgedTask('say', judged('quality'))]),
+            'evals/skills/greeter/llm_judges/quality.md': '  \n',
+        }));
+        await expect(fx.run()).rejects.toThrow(/quality.*empty/s);
+        expect(await fx.ran()).toBe(false);
+    });
+
     it('rejects a grader that has both an inline rubric and a judge', async () => {
         const fx = await evalProject(ctx => ({
             ...greeterProject(fakeAgent({ record: ctx.record }), [judgedTask('say', judged('quality', { rubric: 'inline' }))]),

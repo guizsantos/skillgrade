@@ -71,8 +71,15 @@ export const judgeFile = (evalDir: string, name: string) => path.join(evalDir, J
 async function checkJudges(config: EvalConfig, evalDir: string) {
     for (const task of config.tasks) {
         for (const g of task.graders) {
-            if (g.llm_judge === undefined || await fs.pathExists(judgeFile(evalDir, g.llm_judge))) continue;
-            throw new Error(`${path.basename(evalDir)}: task "${task.name}" uses llm_judge "${g.llm_judge}", but there is no ${JUDGES_DIR}/${g.llm_judge}.md in ${evalDir}`);
+            if (g.llm_judge === undefined) continue;
+            const file = judgeFile(evalDir, g.llm_judge);
+            const stat = await fs.stat(file).catch(() => null);
+            if (!stat?.isFile()) {
+                throw new Error(`${path.basename(evalDir)}: task "${task.name}" uses llm_judge "${g.llm_judge}", but there is no ${JUDGES_DIR}/${g.llm_judge}.md in ${evalDir}`);
+            }
+            if (!(await fs.readFile(file, 'utf-8')).trim()) {
+                throw new Error(`${path.basename(evalDir)}: llm_judge "${g.llm_judge}" is empty (${file}); a judge needs a rubric`);
+            }
         }
     }
 }
