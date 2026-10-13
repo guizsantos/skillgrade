@@ -84,6 +84,15 @@ describe('bundled examples', () => {
         });
     });
 
+    it("the repository's own self-evaluation (evals/) is an Eval Project too", async () => {
+        const project = await loadProject(path.resolve(__dirname, '..', 'evals'));
+        const found = await testedResources(project);
+        expect(found.map(r => `${r.kind}:${r.name}`)).toEqual(['skill:skillgrade-graders', 'skill:skillgrade-setup']);
+        for (const r of found) {
+            expect((await loadEvalConfig(r.evalDir, project.defaults)).tasks.length).toBeGreaterThan(0);
+        }
+    });
+
     it('platform: each kind carries its own delivery in the Trial Records', async () => {
         const { projectDir, output } = await copyOf('platform');
         await runEvals(projectDir, { harness: 'command', command: 'true', runtime: 'local', trials: 1, grader: 'deterministic', force: true, output });

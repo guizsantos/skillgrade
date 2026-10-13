@@ -1,0 +1,60 @@
+# Skillgrade Self-Evaluation: the skillgrade-setup skill
+#
+# Dogfooding: evaluates whether an agent can use the skill to turn a skill into an
+# Eval Project. Its sibling, skills/skillgrade-graders/, covers the other skill.
+#
+# Run (from the evals/ directory of this repository):
+#   GEMINI_API_KEY=your-key JEV_API_KEY=your-key skillgrade --smoke
+#
+# The task's workspace is workspace/create-eval-project/: a `code-formatter` skill to evaluate.
+
+tasks:
+  - name: create-eval-project
+    instruction: |
+      A skill called "code-formatter" is defined in skills/code-formatter/SKILL.md.
+      Create an Eval Project that evaluates this skill.
+
+      Requirements:
+      1. Put the Eval Project in a new `evals/` directory, next to `skills/`
+      2. `evals/eval-project.yml` must say where the skills are found, under `search_paths.skills`
+      3. The skill's eval goes in `evals/skills/code-formatter/eval.yml`
+      4. It must define at least one task under `tasks:`
+      5. Each task must have: name, instruction and graders
+      6. Include at least one deterministic grader and one llm_rubric grader
+      7. The instruction for each task should be specific and actionable
+
+    graders:
+      - type: deterministic
+        run: node graders/check-eval-project.js
+        weight: 0.7
+
+      - type: llm_rubric
+        rubric: |
+          Evaluate the generated Eval Project quality:
+
+          Structure (0-0.4):
+          - Does eval-project.yml point search_paths.skills at the directory holding the skill?
+          - Is the eval in skills/code-formatter/eval.yml, named after the skill's directory?
+          - Does it define at least one well-structured task, with no legacy `skill:` or `version` boilerplate?
+
+          Task Quality (0-0.3):
+          - Is the instruction specific enough for an agent to follow?
+          - Do the graders check concrete outcomes?
+          - Are grader weights reasonable?
+
+          Grader Design (0-0.3):
+          - Does it include both deterministic and llm_rubric graders?
+          - Is the deterministic grader checking concrete outcomes?
+          - Is the LLM rubric focused on qualitative assessment?
+        weight: 0.2
+
+      # Jev (TypeSafe) scores one narrow judgment against fixed levels instead of
+      # writing a free-form critique: keep its rubric to a single question.
+      # Needs JEV_API_KEY.
+      - type: llm_rubric
+        llm_provider: jev
+        rubric: |
+          Are the task instructions in the generated eval.yml specific and
+          actionable: could an agent that never saw SKILL.md tell exactly what
+          to produce and where to save it?
+        weight: 0.1
