@@ -31,7 +31,7 @@ afterEach(async () => {
 describe('$import in tasks', () => {
     it('splices a single-task file into the tasks array', async () => {
         await write('evals/open-tooltip.yaml', task('open-tooltip'));
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/open-tooltip.yaml
 `);
@@ -44,7 +44,7 @@ tasks:
         await write('evals/easy.yaml', `- ${task('a').replace(/\n/g, '\n  ')}
 - ${task('b').replace(/\n/g, '\n  ')}
 `);
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/easy.yaml
 `);
@@ -56,7 +56,7 @@ tasks:
     it('keeps a single-entry list a list when it is the whole section', async () => {
         await write('datasets/tasks.yaml', `- ${task('only-one').replace(/\n/g, '\n  ')}
 `);
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   $import: datasets/tasks.yaml
 `);
@@ -69,7 +69,7 @@ tasks:
         await write('evals/easy/b.yaml', task('easy--b'));
         await write('evals/easy/a.yaml', task('easy--a'));
         await write('evals/hard/c.yaml', task('hard--c'));
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/easy/*.yaml
   - $import: evals/**/c.yaml
@@ -88,7 +88,7 @@ tasks:
         await write('evals/a.yaml', task('a'));
         await write('evals/b.yml', task('b'));
         await write('evals/README.md', 'not a task');
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals
 `);
@@ -100,7 +100,7 @@ tasks:
     it('accepts a list of import paths and a bare $import for the whole section', async () => {
         await write('evals/a.yaml', task('a'));
         await write('evals/b.yaml', task('b'));
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   $import:
     - evals/a.yaml
@@ -114,7 +114,7 @@ tasks:
     it('lets sibling keys override every imported task', async () => {
         await write('evals/a.yaml', task('a'));
         await write('evals/b.yaml', task('b', 'trials: 2\n'));
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/*.yaml
     trials: 10
@@ -128,7 +128,7 @@ tasks:
         await write('evals/easy/one.yaml', task('one'));
         await write('evals/index.yaml', `- $import: easy/one.yaml
 `);
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/index.yaml
 `);
@@ -143,7 +143,7 @@ command: "node ./harness/run.mjs"
 runtime: local
 trials: 5
 `);
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 defaults:
   $import: shared/defaults.yaml
   trials: 1
@@ -162,13 +162,13 @@ tasks:
     });
 
     it('errors on a missing target, an empty glob, and a cycle', async () => {
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/nope.yaml
 `);
         await expect(loadEvalConfig(dir)).rejects.toThrow('$import target not found');
 
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/*.yaml
 `);
@@ -176,7 +176,7 @@ tasks:
 
         await write('evals/loop.yaml', `- $import: ../evals/loop.yaml
 `);
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/loop.yaml
 `);
@@ -187,7 +187,7 @@ tasks:
         await write('evals/broken.yaml', `name: broken
 instruction: "x"
 `);
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/broken.yaml
 `);
@@ -207,7 +207,7 @@ graders:
   - type: llm_rubric
     rubric: prompts/quality.md
 `);
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - $import: evals/easy/one.yaml
 `);
@@ -222,7 +222,7 @@ tasks:
 
     it('leaves inline tasks resolving against the eval root only', async () => {
         await write('instruction.md', 'Root instruction.');
-        await write('eval.yaml', `version: "1"
+        await write('eval.yml', `version: "1"
 tasks:
   - name: a
     instruction: instruction.md

@@ -68,6 +68,12 @@ export interface EvalRunOptions {
     llmModel?: string;          // default model for llm_rubric graders
     llmProvider?: LlmProvider;  // default LLM API for llm_rubric graders
     graderTimeoutSec?: number;  // timeout per grader (default: 120s)
+    /**
+     * Where the grader scripts and rubrics are, kept out of the task dir the agent's
+     * workspace is built from. They are copied into the workspace only after the
+     * agent has exited. Unset: they are in the task dir, as in the workspace.
+     */
+    graderDir?: string;
     expected?: unknown;                     // reference output handed to graders
     metadata?: Record<string, unknown>;     // task labels handed to graders and recorded with results
     environment: {
@@ -231,6 +237,12 @@ export class EvalRunner {
                 output: agentResult.output
             });
 
+            // The agent is done: only now do the graders reach the workspace
+            if (opts.graderDir) {
+                if (!this.provider.injectGraders) throw new Error('This runtime cannot inject grader files after the agent has run');
+                await this.provider.injectGraders(workspace, opts.graderDir);
+            }
+
             // Run all graders
             const graderResults: GraderResult[] = [];
 
@@ -266,7 +278,7 @@ export class EvalRunner {
 
                 const graderTimeoutMs = (opts.graderTimeoutSec ?? 120) * 1000;
                 const result = await withTimeout(
-                    grader.grade(workspace, this.provider, graderConfig, taskPath, sessionLog, env),
+                    grader.grade(workspace, this.provider, graderConfig, opts.graderDir ?? taskPath, sessionLog, env),
                     graderTimeoutMs,
                     `Grader ${graderDef.type} (limit: ${opts.graderTimeoutSec ?? 120}s)`
                 );

@@ -115,6 +115,11 @@ export interface EnvironmentProvider {
     prepare?(taskPath: string, skillsPaths: string[], opts: EnvironmentSetupOpts, env?: Record<string, string>): Promise<string>;
     /** Per-trial setup: create isolated workspace. */
     setup(taskPath: string, skillsPaths: string[], opts: EnvironmentSetupOpts, env?: Record<string, string>): Promise<string>;
+    /**
+     * Copy a task's grader files (scripts, rubrics) into the workspace. Called
+     * after the agent has exited and before grading, so the agent never sees them.
+     */
+    injectGraders?(workspacePath: string, graderDir: string): Promise<void>;
     /** Per-trial cleanup. */
     cleanup(workspacePath: string): Promise<void>;
     /** One-time teardown. */

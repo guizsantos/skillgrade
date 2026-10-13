@@ -23,7 +23,7 @@ export class CommandAgent extends BaseAgent {
         super();
         if (!config || !config.command || !config.command.trim()) {
             throw new Error(
-                'Command agent requires a command. Specify via --command or command in eval.yaml'
+                'Command agent requires a command. Specify via --command or command in eval.yml'
             );
         }
         this.config = config;

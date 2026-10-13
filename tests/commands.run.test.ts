@@ -14,7 +14,6 @@ vi.mock('fs-extra', () => ({
 
 import * as fs from 'fs-extra';
 import { ResolvedTask } from '../src/core/config.types';
-import { prepareTempTaskDir } from '../src/commands/run';
 
 // TaskConfig type for testing (not exported from types)
 interface TaskConfig {
@@ -85,7 +84,6 @@ describe('resolvedToTaskConfig', () => {
     const resolved: ResolvedTask = {
       name: 'test-task',
       instruction: 'do it',
-      workspace: [],
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 0.7 }],
       harness: 'gemini-cli',
       runtime: 'docker',
@@ -105,7 +103,6 @@ describe('resolvedToTaskConfig', () => {
     const resolved: ResolvedTask = {
       name: 'test-task',
       instruction: 'do it',
-      workspace: [],
       graders: [{ type: 'llm_rubric', rubric: 'check quality', weight: 0.3 }],
       harness: 'gemini-cli',
       runtime: 'docker',
@@ -125,7 +122,6 @@ describe('resolvedToTaskConfig', () => {
     const resolved: ResolvedTask = {
       name: 'test-task',
       instruction: 'do it',
-      workspace: [],
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 1.0 }],
       harness: 'gemini-cli',
       runtime: 'docker',
@@ -143,7 +139,6 @@ describe('resolvedToTaskConfig', () => {
     const resolved: ResolvedTask = {
       name: 'test-task',
       instruction: 'do it',
-      workspace: [],
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 1.0 }],
       harness: 'gemini-cli',
       runtime: 'docker',
@@ -164,7 +159,6 @@ describe('resolvedToTaskConfig', () => {
     const resolved: ResolvedTask = {
       name: 'test-task',
       instruction: 'do it',
-      workspace: [],
       graders: [
         { type: 'deterministic', run: 'echo ok', weight: 0.7 },
         { type: 'llm_rubric', rubric: 'quality criteria', weight: 0.3 },
@@ -187,7 +181,6 @@ describe('resolvedToTaskConfig', () => {
     const resolved: ResolvedTask = {
       name: 'test-task',
       instruction: 'do it',
-      workspace: [],
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 1.0 }],
       harness: 'gemini-cli',
       runtime: 'docker',
@@ -239,51 +232,3 @@ SINGLE='quoted'
   });
 });
 
-describe('prepareTempTaskDir', () => {
-  it('copies workspace files directly to destination for the local runtime', async () => {
-    const resolved: ResolvedTask = {
-      name: 'test',
-      instruction: 'test',
-      runtime: 'local',
-      harness: 'gemini-cli',
-      trials: 1,
-      timeout: 10,
-      docker: { base: 'node' },
-      environment: { cpus: 1, memory_mb: 100 },
-      graders: [],
-      workspace: [{ src: 'src/main.ts', dest: 'app/main.ts' }],
-    };
-
-    mockPathExists.mockResolvedValue(true as any);
-    
-    await prepareTempTaskDir(resolved, '/base', '/tmp/task');
-
-    expect(mockEnsureDir).toHaveBeenCalledWith(path.join('/tmp/task', 'app'));
-    expect(mockCopy).toHaveBeenCalledWith(path.resolve('/base', 'src/main.ts'), path.join('/tmp/task', 'app/main.ts'));
-  });
-
-  it('copies workspace files to root and appends COPY to Dockerfile for the docker runtime', async () => {
-    const resolved: ResolvedTask = {
-      name: 'test',
-      instruction: 'test',
-      runtime: 'docker',
-      harness: 'gemini-cli',
-      trials: 1,
-      timeout: 10,
-      docker: { base: 'node' },
-      environment: { cpus: 1, memory_mb: 100 },
-      graders: [],
-      workspace: [{ src: 'src/main.ts', dest: 'app/main.ts' }],
-    };
-
-    mockPathExists.mockResolvedValue(true as any);
-    
-    await prepareTempTaskDir(resolved, '/base', '/tmp/task');
-
-    expect(mockCopy).toHaveBeenCalledWith(path.resolve('/base', 'src/main.ts'), path.join('/tmp/task', 'main.ts'));
-
-    const dockerfileCall = mockWriteFile.mock.calls.find(c => c[0] === path.join('/tmp/task', 'environment', 'Dockerfile'));
-    expect(dockerfileCall).toBeDefined();
-    expect(dockerfileCall![1]).toContain('COPY main.ts app/main.ts');
-  });
-});

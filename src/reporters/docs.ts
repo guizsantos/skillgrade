@@ -2,7 +2,7 @@
  * The data behind `skillgrade preview browser`: every skill under the output
  * directory, built fresh on each request so a run that just finished shows on reload.
  *
- * A skill is `<output>/<name>/results/*.json`. Its eval.yaml, graders and SKILL.md
+ * A skill is `<output>/<name>/results/*.json`. Its eval.yml, graders and SKILL.md
  * are found through the newest report's `provenance.eval_dir`; reports from
  * before provenance (or from another machine) still show, from the reports alone.
  */
@@ -10,7 +10,8 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { loadEvalConfig, resolveTask } from '../core/config';
+import { EVAL_FILE, loadEvalConfig, resolveTask } from '../core/config';
+import { projectDefaultsOf } from '../core/project';
 import { importedFiles } from '../core/imports';
 import { ResolvedGrader, ResolvedTask } from '../core/config.types';
 import { TrialResult } from '../types';
@@ -115,8 +116,8 @@ async function skillView(name: string, resultsDir: string) {
     const skillDirs: string[] = prov.skill_dirs || [];
     const out: any = {
         name, description: '', skill_md: '', skill_dirs: skillDirs, eval_dir: evalDir || null,
-        has_eval: true,  // every skill here has results; `config` says whether its eval.yaml was found
-        config: !!evalDir && await fs.pathExists(path.join(evalDir, 'eval.yaml')),
+        has_eval: true,  // every skill here has results; `config` says whether its eval.yml was found
+        config: !!evalDir && await fs.pathExists(path.join(evalDir, EVAL_FILE)),
         tasks: [], summary: null, trials: {}, history: [],
     };
     const skillMd = skillDirs.length && path.join(skillDirs[0], 'SKILL.md');
@@ -127,7 +128,7 @@ async function skillView(name: string, resultsDir: string) {
     }
     let resolved: ResolvedTask[] = [];
     if (out.config) {
-        const config = await loadEvalConfig(evalDir!);
+        const config = await loadEvalConfig(evalDir!, await projectDefaultsOf(evalDir!));
         resolved = await Promise.all(config.tasks.map(t => resolveTask(t, config.defaults, evalDir!)));
         out.tasks = await Promise.all(resolved.map(async t => ({
             name: t.name, instruction: t.instruction, metadata: t.metadata || {},
@@ -135,7 +136,7 @@ async function skillView(name: string, resultsDir: string) {
             expected: t.expected == null || typeof t.expected === 'string' ? t.expected ?? null : JSON.stringify(t.expected, null, 2),
             solution: t.solution || null,
         })));
-    } else {  // no eval.yaml to read: the tasks the reports name
+    } else {  // no eval.yml to read: the tasks the reports name
         const seen = new Map<string, any>();
         for (const r of runs) for (const [, d] of r.tasks) seen.set(d.task, { name: d.task, instruction: '', metadata: d.metadata || {}, graders: [], expected: null, solution: null });
         out.tasks = [...seen.values()];
@@ -144,8 +145,8 @@ async function skillView(name: string, resultsDir: string) {
         out.summary = summary(name, runs, out.tasks.map((t: any) => t.name));
         if (evalDir) {
             const inputs = [
-                ...out.config ? await importedFiles(path.join(evalDir, 'eval.yaml')) : [],
-                ...resolved.flatMap(t => t.workspace.map(w => path.resolve(evalDir, w.src))),
+                ...out.config ? await importedFiles(path.join(evalDir, EVAL_FILE)) : [],
+                ...resolved.flatMap(t => t.workspaceDir ? [t.workspaceDir] : []),
             ];
             out.history = history(evalDir, skillDirs, inputs, runs, out.summary);
         }

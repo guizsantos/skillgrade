@@ -1,38 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import * as fs from 'fs-extra';
-import * as os from 'os';
-import * as path from 'path';
-import { runEvals } from '../src/commands/run';
+import { evalProject, fakeAgent, greeterProject, projectYml } from './helpers/evalProject';
 
 describe('--harness and --runtime', () => {
-    it('lay out the task for the harness and runtime that run, not the ones eval.yaml names', async () => {
-        const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sg-overrides-'));
-        const output = await fs.mkdtemp(path.join(os.tmpdir(), 'sg-overrides-out-'));
-        await fs.outputFile(path.join(dir, 'SKILL.md'), '---\nname: s\ndescription: d\n---\nbody\n');
-        await fs.outputFile(path.join(dir, 'fixtures', 'input.txt'), 'fixture\n');
-        await fs.outputFile(path.join(dir, 'eval.yaml'), `defaults:
-  harness: gemini-cli
-  runtime: docker
-  trials: 1
-tasks:
-  - name: t
-    instruction: go
-    workspace:
-      - src: fixtures/input.txt
-        dest: data/input.txt
-    graders:
-      - type: deterministic
-        run: "test -f data/input.txt && echo '{\\"score\\":1,\\"details\\":\\"at dest\\"}' || echo '{\\"score\\":0,\\"details\\":\\"not at dest\\"}'"
-`);
-        // the command harness reports whether the image would install the Gemini CLI
-        await runEvals(dir, {
-            harness: 'command', runtime: 'local', output,
-            command: 'echo "gemini-cli installs: $(grep -c gemini-cli environment/Dockerfile)"',
+    it('lay out the task for the harness and runtime that run, not the ones the project names', async () => {
+        const fx = await evalProject(ctx => {
+            const command = fakeAgent({ record: ctx.record });
+            return {
+                ...greeterProject(command),
+                // the project asks for Docker and the Gemini CLI; the run overrides both
+                'evals/eval-project.yml': projectYml(command, { defaults: { harness: 'gemini-cli', runtime: 'docker', trials: 1 } }),
+                'evals/skills/greeter/workspace/say/data/input.txt': 'fixture\n',
+            };
         });
+        await fx.run({ harness: 'command', runtime: 'local', command: fakeAgent({ record: fx.record }) });
 
-        const [file] = await fs.readdir(path.join(output, path.basename(dir), 'results'));
-        const report = await fs.readJson(path.join(output, path.basename(dir), 'results', file));
-        expect(report.trials[0].grader_results[0].details).toBe('at dest');   // laid out for the local runtime
-        expect(JSON.stringify(report.trials[0].session_log)).toContain('gemini-cli installs: 0');  // the Dockerfile follows --harness
+        const { files } = await fx.seen();
+        expect(files['data/input.txt']).toBe('fixture\n');   // laid out for the local runtime
+        expect(files).not.toHaveProperty('environment/Dockerfile');   // no image is built for it
+        expect((await fx.reports('greeter'))[0].pass_rate).toBe(1);
     }, 60_000);
 });

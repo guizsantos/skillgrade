@@ -1,20 +1,20 @@
 /**
  * `skillgrade` (run) command.
  *
- * Reads eval.yaml, resolves tasks, and executes evals.
+ * Reads an Eval Project, resolves each resource's tasks, and executes the evals.
  */
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
-import { loadEvalConfig, resolveTask } from '../core/config';
+import { EVAL_FILE, loadEvalConfig, resolveTask } from '../core/config';
 import { TaskFilter, describeSelection, metadataKeys, selectTasks } from '../core/filter';
-import { detectSkills } from '../core/skills';
+import { PROJECT_FILE, Resource, loadProject, testedResources } from '../core/project';
 import { DockerProvider } from '../providers/docker';
 import { LocalProvider } from '../providers/local';
 import { EvalRunner, EvalRunOptions } from '../evalRunner';
 import { createAgent, AgentConfig, harnessName } from '../agents/registry';
 import { BaseAgent, EvalReport } from '../types';
-import { ResolvedTask } from '../core/config.types';
+import { EvalConfig, EvalTaskConfig, ResolvedTask } from '../core/config.types';
 import { parseEnvFile } from '../utils/env';
 import { gitProvenance, headWorktree, pruneWorktrees, repoRoot, uncommitted } from '../core/provenance';
 import { importedFiles } from '../core/imports';
@@ -46,6 +46,13 @@ interface RunOptions {
     fromHead?: boolean;  // with uncommitted inputs: evaluate HEAD from a worktree, leaving them out
 }
 
+/** One resource with an eval, and the tasks of it that a run selected. */
+interface Target {
+    resource: Resource;
+    config: EvalConfig;
+    tasks: EvalTaskConfig[];
+}
+
 async function loadEnvFile(filePath: string): Promise<Record<string, string>> {
     if (await fs.pathExists(filePath)) {
         return parseEnvFile(await fs.readFile(filePath, 'utf-8'));
@@ -67,25 +74,28 @@ export async function runEvals(dir: string, opts: RunOptions) {
         kv('env', Object.keys(rootEnv).join(', '));
     }
 
-    let { config, skillsPaths, tasksToRun } = await loadSuite(dir, opts, true);
-    const narrowed = tasksToRun.length !== config.tasks.length;
-    if (narrowed) {
-        kv('selected', `${tasksToRun.length} of ${config.tasks.length} tasks`);
+    let { targets } = await loadSuite(dir, opts, true);
+    const allTasks = targets.flatMap(t => t.config.tasks);
+    const selected = targets.reduce((n, t) => n + t.tasks.length, 0);
+    if (selected !== allTasks.length) {
+        kv('selected', `${selected} of ${allTasks.length} tasks`);
     }
 
     if (opts.list) {
-        header(`tasks (${tasksToRun.length})`);
-        for (const line of describeSelection(tasksToRun)) {
-            console.log(`    ${line}`);
+        for (const t of targets) {
+            header(`${t.resource.name} tasks (${t.tasks.length})`);
+            for (const line of describeSelection(t.tasks)) {
+                console.log(`    ${line}`);
+            }
         }
-        const keys = metadataKeys(config.tasks);
+        const keys = metadataKeys(allTasks);
         console.log(`\n  ${fmt.dim('metadata keys:')} ${keys.join(', ') || '(none)'}\n`);
         return;
     }
 
-    if (tasksToRun.length === 0) {
+    if (selected === 0) {
         console.error(`  ${fmt.red('error')}  no tasks match the selection`);
-        console.log(`  ${fmt.dim('metadata keys:')} ${metadataKeys(config.tasks).join(', ') || '(none)'}`);
+        console.log(`  ${fmt.dim('metadata keys:')} ${metadataKeys(allTasks).join(', ') || '(none)'}`);
         throw new Error('No tasks match the selection');
     }
 
@@ -101,7 +111,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
     let ignored: string[] = [];
     if (root) {
         pruneWorktrees(root);  // a crashed --from-head run's leftover
-        ignored = uncommitted(root, (await runInputs(dir, skillsPaths, tasksToRun)).all);
+        ignored = uncommitted(root, (await runInputs(dir, targets)).all);
         if (ignored.length && !opts.fromHead) {
             console.error(`  ${fmt.red('error')}  uncommitted changes to this eval's inputs:`);
             for (const line of ignored) console.error(`    ${line}`);
@@ -110,13 +120,10 @@ export async function runEvals(dir: string, opts: RunOptions) {
         }
     }
 
-    // Output directory: in this tree, even when the inputs come from a worktree
+    // Output directory: in this tree, even when the inputs come from a worktree.
+    // Each resource's results and scratch space sit under its own name.
     const outputBase = opts.output || path.join(os.tmpdir(), 'skillgrade');
-    const skillName = path.basename(dir);
-    const outputDir = path.join(outputBase, skillName);
-    const resultsDir = path.join(outputDir, 'results');
-    await fs.ensureDir(resultsDir);
-    kv('output', outputDir);
+    kv('output', outputBase);
 
     // --from-head: read every input from a worktree at HEAD, removed however the run ends
     const head = ignored.length ? headWorktree(root!) : null;
@@ -133,19 +140,24 @@ export async function runEvals(dir: string, opts: RunOptions) {
     try {
         const src = head ? head.at(dir) : dir;
         if (head) {
-            if (!await fs.pathExists(path.join(src, 'eval.yaml'))) {
-                throw new Error('eval.yaml is not committed at HEAD: nothing to evaluate');
+            if (!await fs.pathExists(path.join(src, PROJECT_FILE))) {
+                throw new Error(`${PROJECT_FILE} is not committed at HEAD: nothing to evaluate`);
             }
-            ({ config, skillsPaths, tasksToRun } = await loadSuite(src, opts, false));
+            ({ targets } = await loadSuite(src, opts, false));
         }
 
-        // Taken before the run: files edited mid-run don't count
-        let runProvenance = gitProvenance(src, skillsPaths, (await runInputs(src, skillsPaths, tasksToRun)).imported);
-        if (head) {
-            runProvenance = {
-                ...runProvenance, eval_dir: head.back(runProvenance.eval_dir),
-                skill_dirs: runProvenance.skill_dirs.map(head.back), from_head: true, ignored,
-            };
+        // Taken before the run: files edited mid-run don't count. One run id for every resource.
+        const now = new Date();
+        const provenanceOf = new Map<Target, ReturnType<typeof gitProvenance>>();
+        for (const t of targets) {
+            let provenance = gitProvenance(t.resource.evalDir, [t.resource.dir], (await runInputs(src, [t])).imported, now);
+            if (head) {
+                provenance = {
+                    ...provenance, eval_dir: head.back(provenance.eval_dir),
+                    skill_dirs: provenance.skill_dirs.map(head.back), from_head: true, ignored,
+                };
+            }
+            provenanceOf.set(t, provenance);
         }
 
         // Track CI results
@@ -155,11 +167,19 @@ export async function runEvals(dir: string, opts: RunOptions) {
         // Agents whose CLI takes a model; the rest ignore --model and are told so.
         const warnedNoModelSupport = new Set<string>();
 
-        // Run each task
+        // Run each task of each resource
+        const jobs = targets.flatMap(target => target.tasks.map(taskDef => ({ target, taskDef })));
         let taskIndex = 0;
-        for (const taskDef of tasksToRun) {
+        for (const { target, taskDef } of jobs) {
             taskIndex++;
-            const resolved = await resolveTask(taskDef, config.defaults, src);
+            const { config, resource } = target;
+            const evalDir = resource.evalDir;
+            const skillsPaths = [resource.dir];
+            const outputDir = path.join(outputBase, resource.name);
+            const resultsDir = path.join(outputDir, 'results');
+            await fs.ensureDir(resultsDir);
+
+            const resolved = await resolveTask(taskDef, config.defaults, evalDir);
             const trials = opts.trials ?? resolved.trials;
             const parallel = opts.parallel ?? 1;
 
@@ -183,9 +203,11 @@ export async function runEvals(dir: string, opts: RunOptions) {
             resolved.harness = agentName;
             resolved.runtime = providerName;
 
-            // Create a temp task directory for Docker builds
+            // Two temp dirs per task: what the agent's workspace is built from, and the
+            // grader files, which only reach the workspace once the agent has exited
             const tmpTaskDir = path.join(outputDir, 'tmp', resolved.name);
-            await prepareTempTaskDir(resolved, src, tmpTaskDir);
+            const tmpGraderDir = path.join(outputDir, 'tmp-graders', resolved.name);
+            await prepareTempTaskDir(resolved, evalDir, tmpTaskDir, tmpGraderDir);
 
             // Build eval options — pass resolved content directly
             const evalOpts: EvalRunOptions = {
@@ -199,6 +221,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
                 expected: resolved.expected,
                 metadata: resolved.metadata,
                 environment: resolved.environment,
+                graderDir: tmpGraderDir,
             };
 
             // CLI flag > task-level override > defaults; undefined means the harness decides
@@ -222,7 +245,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
             } else if (agentName === 'acp') {
                 const acpCommand = opts.acpCommand || resolved.acp?.command;
                 if (!acpCommand) {
-                    throw new Error('The acp harness requires a command. Specify via --acp-command or acp.command in eval.yaml');
+                    throw new Error('The acp harness requires a command. Specify via --acp-command or acp.command in eval.yml');
                 }
                 agentConfig.acp = {
                     command: acpCommand,
@@ -242,7 +265,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
             } else if (agentName === 'command') {
                 const command = opts.command || resolved.command;
                 if (!command) {
-                    throw new Error('The command harness requires a command. Specify via --command or command in eval.yaml');
+                    throw new Error('The command harness requires a command. Specify via --command or command in eval.yml');
                 }
                 agentConfig.command = { command };
             }
@@ -253,7 +276,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
                 : new LocalProvider();
 
             const runner = new EvalRunner(provider, resultsDir, opts.validate ? undefined : {
-                ...runProvenance, harness: agentName, model: modelName ?? null,
+                ...provenanceOf.get(target)!, harness: agentName, model: modelName ?? null,
             });
 
             if (opts.validate) {
@@ -263,11 +286,16 @@ export async function runEvals(dir: string, opts: RunOptions) {
                     continue;
                 }
 
-                header(`validate: ${resolved.name}`);
+                header(`validate: ${resource.name} / ${resolved.name}`);
 
+                // The solution lives in the eval, outside the workspace: put it there for this run only
+                const solution = resolved.solution;
                 const solveAgent = {
                     async run(_instruction: string, _workspace: string, runCommand: any) {
-                        const result = await runCommand(`bash ${path.basename(resolved.solution!)}`);
+                        const script = path.basename(solution);
+                        const b64 = (await fs.readFile(solution)).toString('base64');
+                        await runCommand(`echo '${b64}' | base64 -d > '${script}'`);
+                        const result = await runCommand(`bash '${script}'`);
                         return result.stdout;
                     }
                 } as BaseAgent;
@@ -286,7 +314,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
                 // Normal eval mode
                 const agent = createAgent(agentName, agentConfig);
 
-                header(`${resolved.name}  ${fmt.dim(`(${taskIndex}/${tasksToRun.length})`)}`);
+                header(`${resource.name} / ${resolved.name}  ${fmt.dim(`(${taskIndex}/${jobs.length})`)}`);
                 console.log(`    ${fmt.dim('harness')} ${agentName}${modelName ? `  ${fmt.dim('model')} ${modelName}` : ''}  ${fmt.dim('runtime')} ${providerName}  ${fmt.dim('trials')} ${trials}${parallel > 1 ? `  ${fmt.dim('parallel')} ${parallel}` : ''}`);
                 console.log();
 
@@ -314,22 +342,23 @@ export async function runEvals(dir: string, opts: RunOptions) {
 
             // How far through the selected tasks we are. Pointless for a single
             // task, and the run is otherwise silent about it until the very end.
-            if (tasksToRun.length > 1) {
-                progress(taskIndex, tasksToRun.length);
+            if (jobs.length > 1) {
+                progress(taskIndex, jobs.length);
             }
 
-            // Cleanup temp dir
+            // Cleanup temp dirs
             try { await fs.remove(tmpTaskDir); } catch { /* ignore cleanup errors */ }
+            try { await fs.remove(tmpGraderDir); } catch { /* ignore cleanup errors */ }
         }
 
         // CI mode: exit with appropriate code
         if (opts.ci) {
-            const threshold = opts.threshold ?? config.defaults.threshold;
+            const ciThreshold = opts.threshold ?? targets[0].config.defaults.threshold;
             if (!allPassed) {
-                console.error(`\n  ${fmt.fail('CI FAILED')}  below threshold ${(threshold * 100).toFixed(0)}%\n`);
+                console.error(`\n  ${fmt.fail('CI FAILED')}  below threshold ${(ciThreshold * 100).toFixed(0)}%\n`);
                 throw new Error('CI check failed');
             }
-            console.log(`\n  ${fmt.pass('CI PASSED')}  above threshold ${(threshold * 100).toFixed(0)}%\n`);
+            console.log(`\n  ${fmt.pass('CI PASSED')}  above threshold ${(ciThreshold * 100).toFixed(0)}%\n`);
         }
     } finally {
         process.off('SIGINT', onSignal);
@@ -338,65 +367,66 @@ export async function runEvals(dir: string, opts: RunOptions) {
     }
 }
 
-/** The eval config, its skills and the selected tasks, read from `dir`. */
+/** The Eval Project's resources with an eval, and the tasks of each that the selection picks. */
 async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
-    const config = await loadEvalConfig(dir);
+    const project = await loadProject(dir);
+    const resources = await testedResources(project);
+    if (resources.length === 0) {
+        throw new Error(`No evals in ${dir}: add <kind>/<name>/${EVAL_FILE} for a resource found in search_paths`);
+    }
+    if (log) kv('skills', resources.filter(r => r.kind === 'skill').map(r => r.name).join(', '));
 
-    // Detect skills
-    let skillsPaths: string[] = [];
-    if (config.skill) {
-        let skillDir = path.resolve(dir, config.skill);
-        const stat = await fs.stat(skillDir).catch(() => null);
-        if (stat?.isFile()) {
-            skillDir = path.dirname(skillDir);
-        }
-        if (stat && await fs.pathExists(skillDir)) {
-            skillsPaths = [skillDir];
-            if (log) kv('skill', path.relative(dir, skillDir) || '.');
-        } else {
-            if (log) console.error(`  ${fmt.red('warning')}  skill path not found: ${config.skill}`);
-        }
-    } else {
-        const skills = await detectSkills(dir);
-        skillsPaths = skills.map(s => s.path);
-        if (skills.length > 0) {
-            if (log) kv('skills', skills.map(s => s.name).join(', '));
+    // Select which of the tasks to run: by name, by name pattern, by metadata. A
+    // selection that does not fit one resource's tasks just leaves that one out,
+    // and is an error only when it fits none.
+    const selection = {
+        names: opts.eval?.split(',').map(s => s.trim()).filter(Boolean),
+        filters: opts.filters,
+        pattern: opts.filterPattern,
+    };
+    const targets: Target[] = [];
+    const errors: unknown[] = [];
+    for (const resource of resources) {
+        const config = await loadEvalConfig(resource.evalDir, project.defaults);
+        try {
+            targets.push({ resource, config, tasks: selectTasks(config.tasks, selection) });
+        } catch (err) {
+            errors.push(err);
+            targets.push({ resource, config, tasks: [] });
         }
     }
-
-    // Select which of the tasks to run: by name, by name pattern, by metadata
-    let tasksToRun;
-    try {
-        tasksToRun = selectTasks(config.tasks, {
-            names: opts.eval?.split(',').map(s => s.trim()).filter(Boolean),
-            filters: opts.filters,
-            pattern: opts.filterPattern,
-        });
-    } catch (err) {
+    if (errors.length === targets.length) {
+        const err = errors[0];
         if (!log) throw err;
         console.error(`  ${fmt.red('error')}  ${err instanceof Error ? err.message : err}`);
         if (opts.eval) {
-            console.log(`  ${fmt.dim('available:')} ${config.tasks.map(t => t.name).join(', ')}`);
+            console.log(`  ${fmt.dim('available:')} ${targets.flatMap(t => t.config.tasks.map(task => task.name)).join(', ')}`);
         }
         throw err;
     }
-    return { config, skillsPaths, tasksToRun };
+    return { targets };
 }
 
-/** Every file a run reads that git tracks: the eval dir, its imports, the skills, the files tasks copy in. */
-async function runInputs(dir: string, skillsPaths: string[], tasks: { workspace?: { src: string }[] }[]) {
-    const imported = await importedFiles(path.join(dir, 'eval.yaml'));
-    const workspaceSrcs = tasks.flatMap(t => (t.workspace || []).map(w => path.resolve(dir, w.src)));
-    return { imported, all: [dir, ...imported, ...skillsPaths, ...workspaceSrcs] };
+/** Every file a run reads that git tracks: the project, its evals and their imports, the resources. */
+async function runInputs(dir: string, targets: Target[]) {
+    const imported = [...new Set([
+        path.join(dir, PROJECT_FILE),
+        ...(await Promise.all(targets.map(t => importedFiles(path.join(t.resource.evalDir, EVAL_FILE))))).flat(),
+    ])];
+    return { imported, all: [dir, ...imported, ...targets.map(t => t.resource.dir)] };
 }
 
 /**
- * Create a temp task directory for Docker builds.
- * Contains: Dockerfile, workspace files, grader scripts.
- * No longer writes task.toml or instruction.md — those are passed directly.
+ * Create the temp dirs for one task.
+ *
+ * `agentDir` is what the agent's workspace is built from: the task's workspace
+ * folder and, for Docker, the Dockerfile. `graderDir` holds the grader scripts
+ * and rubrics, copied into the workspace only after the agent has exited.
+ * No task.toml or instruction.md — those are passed directly.
  */
-export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string, tmpDir: string) {
-    await fs.ensureDir(tmpDir);
+export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string, agentDir: string, graderDir: string) {
+    await fs.ensureDir(agentDir);
+    await fs.ensureDir(graderDir);
 
     // An imported task looks for its files next to its own file first
     const baseDirs = resolved.baseDirs?.length ? resolved.baseDirs : [baseDir];
@@ -409,13 +439,13 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
     };
 
     // Write each deterministic grader script
-    await fs.ensureDir(path.join(tmpDir, 'tests'));
+    await fs.ensureDir(path.join(graderDir, 'tests'));
     const detGraders = resolved.graders.filter(g => g.type === 'deterministic');
     for (let i = 0; i < detGraders.length; i++) {
         if (detGraders[i].run) {
             const script = `#!/bin/bash\n${detGraders[i].run!.trim()}\n`;
             const filename = i === 0 ? 'test.sh' : `test_${i}.sh`;
-            await fs.writeFile(path.join(tmpDir, 'tests', filename), script);
+            await fs.writeFile(path.join(graderDir, 'tests', filename), script);
         }
     }
 
@@ -426,7 +456,7 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
             for (const ref of pathMatches) {
                 const refDir = ref.split('/')[0];
                 const srcDir = await findSrc(refDir);
-                const destDir = path.join(tmpDir, refDir);
+                const destDir = path.join(graderDir, refDir);
                 if (refDir !== ref && srcDir && !await fs.pathExists(destDir)) {
                     await fs.copy(srcDir, destDir);
                 }
@@ -435,17 +465,25 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
     }
 
     // Write each LLM rubric
-    await fs.ensureDir(path.join(tmpDir, 'prompts'));
+    await fs.ensureDir(path.join(graderDir, 'prompts'));
     const llmGraders = resolved.graders.filter(g => g.type === 'llm_rubric');
     for (let i = 0; i < llmGraders.length; i++) {
         if (llmGraders[i].rubric) {
             const filename = i === 0 ? 'quality.md' : `quality_${i}.md`;
-            await fs.writeFile(path.join(tmpDir, 'prompts', filename), llmGraders[i].rubric!);
+            await fs.writeFile(path.join(graderDir, 'prompts', filename), llmGraders[i].rubric!);
         }
     }
 
+    // The task's workspace folder; without one the workspace starts empty
+    if (resolved.workspaceDir) {
+        await fs.copy(resolved.workspaceDir, agentDir);
+    }
+
+    // Only the Docker runtime builds an image
+    if (resolved.runtime !== 'docker') return;
+
     // Write Dockerfile
-    await fs.ensureDir(path.join(tmpDir, 'environment'));
+    await fs.ensureDir(path.join(agentDir, 'environment'));
     let dockerfileContent = `FROM ${resolved.docker.base}\n\nWORKDIR /workspace\n\n`;
 
     // Install the harness
@@ -475,27 +513,7 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
         }
     }
 
-    // Copy workspace files
-    for (const w of resolved.workspace) {
-        const srcPath = await findSrc(w.src);
-        if (srcPath) {
-            if (resolved.runtime === 'local') {
-                // For the local runtime: copy directly to destination path in tmpDir
-                const destPath = path.join(tmpDir, w.dest);
-                await fs.ensureDir(path.dirname(destPath));
-                await fs.copy(srcPath, destPath);
-            } else {
-                // For Docker: copy to tmpDir root, Dockerfile will place it
-                const destInTmp = path.join(tmpDir, path.basename(w.src));
-                await fs.copy(srcPath, destInTmp);
-                dockerfileContent += `COPY ${path.basename(w.src)} ${w.dest}\n`;
-                if (w.chmod) {
-                    dockerfileContent += `RUN chmod ${w.chmod} ${w.dest}\n`;
-                }
-            }
-        }
-    }
-
-    dockerfileContent += `\nCOPY . .\nCMD ["bash"]\n`;
-    await fs.writeFile(path.join(tmpDir, 'environment', 'Dockerfile'), dockerfileContent);
+    // The workspace files come in with the build context; the Dockerfile itself stays out of the workspace
+    dockerfileContent += `COPY . .\nRUN rm -rf environment\nCMD ["bash"]\n`;
+    await fs.writeFile(path.join(agentDir, 'environment', 'Dockerfile'), dockerfileContent);
 }

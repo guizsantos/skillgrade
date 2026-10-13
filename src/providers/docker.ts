@@ -111,6 +111,12 @@ export class DockerProvider implements EnvironmentProvider {
         return container.id;
     }
 
+    /** Put the grader files into the container's /workspace, after the agent is done. */
+    async injectGraders(containerId: string, graderDir: string): Promise<void> {
+        const archive = await this.createTarFromDir(graderDir, '');
+        await this.docker.getContainer(containerId).putArchive(archive, { path: '/workspace' });
+    }
+
     /**
      * Per-trial cleanup: kill and remove the container only.
      * The image is preserved for reuse.

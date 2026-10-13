@@ -1,5 +1,5 @@
 /**
- * Parser and validator for eval.yaml config files.
+ * Parser and validator for a resource's eval.yml (inside an Eval Project).
  */
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -9,7 +9,6 @@ import {
     EvalTaskConfig,
     ResolvedTask,
     ResolvedGrader,
-    WorkspaceMapping,
     EnvironmentConfig,
     AcpConfig,
     LlmProvider,
@@ -35,19 +34,39 @@ const DEFAULT_CONFIG: EvalDefaults = {
     },
 };
 
+/** The file a resource's eval lives in, inside its directory of the Eval Project. */
+export const EVAL_FILE = 'eval.yml';
+
 /**
- * Load and parse eval.yaml from a directory.
+ * Load and parse a resource's eval.yml from its eval directory. The Eval
+ * Project's `defaults` sit underneath the eval's own.
  */
-export async function loadEvalConfig(dir: string): Promise<EvalConfig> {
-    const yamlPath = path.join(dir, 'eval.yaml');
+export async function loadEvalConfig(evalDir: string, projectDefaults: Record<string, any> = {}): Promise<EvalConfig> {
+    const legacy = path.join(evalDir, 'eval.yaml');
+    if (await fs.pathExists(legacy)) {
+        throw new Error(`${legacy}: eval.yaml is no longer supported. Rename it to ${EVAL_FILE}, move it to <eval project>/<kind>/<name>/, and drop the \`skill:\` and \`workspace:\` keys (see docs).`);
+    }
+    const yamlPath = path.join(evalDir, EVAL_FILE);
     if (!await fs.pathExists(yamlPath)) {
-        throw new Error(`No eval.yaml found in ${dir}`);
+        throw new Error(`No ${EVAL_FILE} found in ${evalDir}`);
     }
 
     // Sections may live in other files — expand every `$import` first
     const raw = await loadYamlWithImports(yamlPath);
+    if (raw && typeof raw === 'object') {
+        raw.defaults = mergeDefaults(projectDefaults, raw.defaults);
+    }
 
     return validateConfig(raw);
+}
+
+/** `own` over `base`, one level deeper for the nested settings. */
+function mergeDefaults(base: Record<string, any>, own: Record<string, any> = {}): Record<string, any> {
+    const merged = { ...base, ...own };
+    for (const key of ['docker', 'environment', 'acp']) {
+        if (base[key] && own[key]) merged[key] = { ...base[key], ...own[key] };
+    }
+    return merged;
 }
 
 const VALID_LLM_PROVIDERS: LlmProvider[] = ['gemini', 'anthropic', 'openai', 'jev'];
@@ -69,7 +88,7 @@ function renameLegacyKeys(obj: any, renames: Record<string, string>, where: stri
         if (!(old in obj)) continue;
         if (!warned.has(`${where}.${old}`)) {
             warned.add(`${where}.${old}`);
-            console.error(`  warning  eval.yaml: "${old}" in ${where} is deprecated, use "${now}"`);
+            console.error(`  warning  eval.yml: "${old}" in ${where} is deprecated, use "${now}"`);
         }
         if (!(now in obj)) obj[now] = obj[old];
         delete obj[old];
@@ -81,7 +100,10 @@ function renameLegacyKeys(obj: any, renames: Record<string, string>, where: stri
  */
 function validateConfig(raw: any): EvalConfig {
     if (!raw || typeof raw !== 'object') {
-        throw new Error('eval.yaml must be a YAML object');
+        throw new Error('eval.yml must be a YAML object');
+    }
+    if ('skill' in raw) {
+        throw new Error('eval.yml has a "skill:" key. The resource is the directory this eval sits in (<kind>/<name>/); drop the key');
     }
 
     renameLegacyKeys(raw.defaults, RENAMED_KEYS, 'defaults');
@@ -96,7 +118,7 @@ function validateConfig(raw: any): EvalConfig {
     let acp: AcpConfig | undefined;
     if (raw.defaults?.acp) {
         if (!raw.defaults.acp.command) {
-            throw new Error('eval.yaml: acp.command is required when using ACP agent');
+            throw new Error('eval.yml: acp.command is required when using ACP agent');
         }
         acp = {
             command: raw.defaults.acp.command,
@@ -124,11 +146,11 @@ function validateConfig(raw: any): EvalConfig {
 
     defaults.harness = harnessName(defaults.harness);
     if (defaults.llm_provider && !VALID_LLM_PROVIDERS.includes(defaults.llm_provider)) {
-        throw new Error(`eval.yaml: llm_provider must be one of ${VALID_LLM_PROVIDERS.join(', ')}, got "${defaults.llm_provider}"`);
+        throw new Error(`eval.yml: llm_provider must be one of ${VALID_LLM_PROVIDERS.join(', ')}, got "${defaults.llm_provider}"`);
     }
 
     if (!raw.tasks || !Array.isArray(raw.tasks) || raw.tasks.length === 0) {
-        throw new Error('eval.yaml must have at least one task in the "tasks" array');
+        throw new Error('eval.yml must have at least one task in the "tasks" array');
     }
 
     const tasks: EvalTaskConfig[] = raw.tasks.map((t: any, i: number) => {
@@ -152,21 +174,17 @@ function validateConfig(raw: any): EvalConfig {
             throw new Error(`Task "${t.name}" has a "metadata" that is not an object — metadata holds key/value labels used by --filter`);
         }
 
-        const workspace: WorkspaceMapping[] = (t.workspace || []).map((w: any) => {
-            if (typeof w === 'string') {
-                // Support shorthand: "fixtures/app.js" → same filename in workspace
-                return { src: w, dest: path.basename(w) };
-            }
-            if (!w.src || !w.dest) {
-                throw new Error(`Task "${t.name}" has a workspace mapping without src/dest`);
-            }
-            return { src: w.src, dest: w.dest, chmod: w.chmod };
-        });
+        // The task's workspace is the folder named after it, so the name must be a safe folder name
+        if (typeof t.name !== 'string' || /[\\/]/.test(t.name) || t.name === '.' || t.name === '..') {
+            throw new Error(`Task name "${t.name}" must be a plain name: it is also the name of the task's workspace/ folder`);
+        }
+        if (t.workspace !== undefined) {
+            throw new Error(`Task "${t.name}" has a "workspace:" key. A task's workspace is the folder workspace/${t.name}/ next to eval.yml; put its files there and drop the key`);
+        }
 
         return {
             name: t.name,
             instruction: t.instruction,
-            workspace,
             graders: t.graders.map((g: any) => {
                 if (g.llm_provider && !VALID_LLM_PROVIDERS.includes(g.llm_provider)) {
                     throw new Error(`Task "${t.name}" grader has invalid llm_provider "${g.llm_provider}", must be one of ${VALID_LLM_PROVIDERS.join(', ')}`);
@@ -198,7 +216,7 @@ function validateConfig(raw: any): EvalConfig {
         };
     });
 
-    return { version, skill: raw.skill, defaults, tasks };
+    return { version, defaults, tasks };
 }
 
 /**
@@ -263,10 +281,14 @@ export async function resolveTask(
         ? await resolveExistingPath(task.solution, baseDirs)
         : undefined;
 
+    // The task's workspace is the folder named after it; no folder means an empty workspace
+    const taskWorkspace = path.join(baseDir, 'workspace', task.name);
+    const workspaceDir = await fs.pathExists(taskWorkspace) ? taskWorkspace : undefined;
+
     return {
         name: task.name,
         instruction,
-        workspace: task.workspace || [],
+        workspaceDir,
         graders,
         solution,
         expected: task.expected,

@@ -1,16 +1,9 @@
 /**
- * eval.yaml configuration types.
+ * eval.yml configuration types.
  *
- * These types define the schema for the eval.yaml file that developers
- * create to define evaluation tasks for their skills.
+ * These types define the schema for a resource's `eval.yml` (inside an Eval
+ * Project) that developers write to define evaluation tasks.
  */
-
-/** Workspace file mapping: copy a local file into the container */
-export interface WorkspaceMapping {
-    src: string;        // relative to eval.yaml
-    dest: string;       // path in container (relative = in /workspace, absolute = absolute)
-    chmod?: string;     // e.g. "+x"
-}
 
 /** Grader definition */
 export interface EvalGraderConfig {
@@ -50,7 +43,6 @@ export interface AcpConfig {
 export interface EvalTaskConfig {
     name: string;
     instruction: string;    // inline text or path to .md file
-    workspace?: WorkspaceMapping[];
     graders: EvalGraderConfig[];
     solution?: string;      // path to reference solution script
 
@@ -100,10 +92,9 @@ export interface EvalDefaults {
     environment: EnvironmentConfig;
 }
 
-/** Top-level eval.yaml */
+/** A resource's eval.yml, with the Eval Project's defaults underneath its own */
 export interface EvalConfig {
     version: string;
-    skill?: string;         // optional path to SKILL.md (defaults to auto-detection)
     defaults: EvalDefaults;
     tasks: EvalTaskConfig[];
 }
@@ -112,7 +103,8 @@ export interface EvalConfig {
 export interface ResolvedTask {
     name: string;
     instruction: string;    // actual content (not file path)
-    workspace: WorkspaceMapping[];
+    /** The folder named after the task under the eval's `workspace/`, if there is one; copied into the agent's workspace. */
+    workspaceDir?: string;
     graders: ResolvedGrader[];
     solution?: string;      // resolved file path
     expected?: unknown;                     // reference output — graders only, never the workspace

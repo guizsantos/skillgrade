@@ -4,7 +4,7 @@
  * skillgrade CLI
  *
  * Usage:
- *   skillgrade                     Run all eval tasks from eval.yaml
+ *   skillgrade                     Run every eval in the Eval Project (eval-project.yml)
  *   skillgrade init                Generate eval.yaml from detected skills
  *   skillgrade preview [browser]   View results (CLI default, or every skill in the browser)
  *   skillgrade <task-name>         Run a specific eval
@@ -140,7 +140,7 @@ function printHelp() {
   skillgrade - The easiest way to evaluate your Agent Skills
 
   Usage:
-    skillgrade                     Run all evals from eval.yaml
+    skillgrade                     Run every eval in this Eval Project (eval-project.yml)
     skillgrade init [--force]      Generate eval.yaml (--force to overwrite)
     skillgrade preview             View this skill's latest results in the terminal
     skillgrade preview browser [--port=3847]
