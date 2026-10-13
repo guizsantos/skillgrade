@@ -15,6 +15,7 @@ import {
 } from './config.types';
 import { loadYamlWithImports, sourceFileOf } from './imports';
 import { harnessName } from '../agents/registry';
+import { parseTaskRef } from './taskRef';
 
 // We use a simple YAML parser — js-yaml is the standard
 // For now, we'll use a lightweight approach: JSON-compatible YAML subset
@@ -179,8 +180,18 @@ function validateConfig(raw: any): EvalConfig {
         if (typeof t.name !== 'string' || /[\\/]/.test(t.name) || t.name === '.' || t.name === '..') {
             throw new Error(`Task name "${t.name}" must be a plain name: it is also the name of the task's workspace/ folder`);
         }
+        // `workspace: [{task: name[@resource]}]` borrows other tasks' workspaces; the task's own files are its workspace/<name>/ folder
+        let workspaceFrom: string[] | undefined;
         if (t.workspace !== undefined) {
-            throw new Error(`Task "${t.name}" has a "workspace:" key. A task's workspace is the folder workspace/${t.name}/ next to eval.yml; put its files there and drop the key`);
+            const entries = t.workspace;
+            const valid = Array.isArray(entries) && entries.every((e: any) => e && typeof e === 'object' && !Array.isArray(e) && Object.keys(e).length === 1 && typeof e.task === 'string');
+            if (!valid) {
+                throw new Error(`Task "${t.name}": "workspace:" must be a list of {task: name[@resource]} entries. A task's own files go in the folder workspace/${t.name}/ next to eval.yml`);
+            }
+            workspaceFrom = entries.map((e: any) => {
+                parseTaskRef(e.task);   // malformed references stop the load
+                return e.task;
+            });
         }
 
         return {
@@ -200,6 +211,7 @@ function validateConfig(raw: any): EvalConfig {
                     weight: g.weight ?? 1.0,
                 };
             }),
+            workspaceFrom,
             solution: t.solution,
             expected: t.expected,
             metadata: t.metadata,

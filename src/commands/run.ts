@@ -8,6 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { EVAL_FILE, loadEvalConfig, resolveTask } from '../core/config';
 import { TaskFilter, describeSelection, metadataKeys, selectTasks } from '../core/filter';
+import { resolveTaskRef } from '../core/taskRef';
 import { PROJECT_FILE, Resource, loadProject, testedResources } from '../core/project';
 import { DockerProvider } from '../providers/docker';
 import { LocalProvider } from '../providers/local';
@@ -51,6 +52,8 @@ interface Target {
     resource: Resource;
     config: EvalConfig;
     tasks: EvalTaskConfig[];
+    /** Per task name: the workspace folders it borrows from other tasks. */
+    borrowed: Map<string, string[]>;
 }
 
 async function loadEnvFile(filePath: string): Promise<Record<string, string>> {
@@ -180,6 +183,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
             await fs.ensureDir(resultsDir);
 
             const resolved = await resolveTask(taskDef, config.defaults, evalDir);
+            resolved.borrowedWorkspaceDirs = target.borrowed.get(taskDef.name);
             const trials = opts.trials ?? resolved.trials;
             const parallel = opts.parallel ?? 1;
 
@@ -389,14 +393,15 @@ async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
     for (const resource of resources) {
         const config = await loadEvalConfig(resource.evalDir, project.defaults);
         try {
-            targets.push({ resource, config, tasks: selectTasks(config.tasks, selection) });
+            targets.push({ resource, config, tasks: selectTasks(config.tasks, selection), borrowed: new Map() });
         } catch (err) {
             // Only "no task by that name here" may pass: a bad filter or pattern is wrong everywhere
             if (!(err instanceof Error && /^Eval ".*" not found$/.test(err.message))) throw err;
             errors.push(err);
-            targets.push({ resource, config, tasks: [] });
+            targets.push({ resource, config, tasks: [], borrowed: new Map() });
         }
     }
+    resolveBorrowedWorkspaces(targets);
     if (errors.length === targets.length) {
         const err = errors[0];
         if (!log) throw err;
@@ -407,6 +412,32 @@ async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
         throw err;
     }
     return { targets };
+}
+
+/**
+ * Resolve every task's `workspace: [{task: ...}]` references, the unselected
+ * tasks' too, so a typo is not hidden by a selection. Fails before any trial.
+ */
+function resolveBorrowedWorkspaces(targets: Target[]) {
+    const catalogue = targets.map(t => ({
+        kind: path.basename(path.dirname(t.resource.evalDir)),
+        name: t.resource.name,
+        tasks: t.config.tasks.map(task => task.name),
+        evalDir: t.resource.evalDir,
+    }));
+    targets.forEach((target, i) => {
+        for (const task of target.config.tasks) {
+            const dirs = (task.workspaceFrom ?? []).map(ref => {
+                try {
+                    const { task: name, evalDir } = resolveTaskRef(ref, catalogue[i], catalogue);
+                    return path.join(evalDir, 'workspace', name);
+                } catch (err) {
+                    throw new Error(`${target.resource.name} / ${task.name}: workspace: ${err instanceof Error ? err.message : err}`);
+                }
+            });
+            target.borrowed.set(task.name, dirs);
+        }
+    });
 }
 
 /** Every file a run reads that git tracks: the project, its evals and their imports, the resources. */
@@ -477,8 +508,9 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
     }
 
     // The task's workspace folder; without one the workspace starts empty
-    if (resolved.workspaceDir) {
-        await fs.copy(resolved.workspaceDir, agentDir);
+    // Borrowed folders first, in order, then the task's own on top; a task with no folder lends nothing
+    for (const dir of [...(resolved.borrowedWorkspaceDirs ?? []), ...(resolved.workspaceDir ? [resolved.workspaceDir] : [])]) {
+        if (await fs.pathExists(dir)) await fs.copy(dir, agentDir);
     }
 
     // Only the Docker runtime builds an image
