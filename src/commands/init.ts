@@ -1,26 +1,30 @@
 /**
  * `skillgrade init` command.
  *
- * Detects skills in the current directory and generates an eval.yaml template.
- * With an API key, uses an LLM to generate intelligent eval tasks.
- * Without an API key, generates a well-commented template.
+ * Detects skills in the current directory and scaffolds an Eval Project for
+ * them in `./evals`: `eval-project.yml` plus one `skills/<name>/eval.yml` per
+ * skill. The evals sit apart from the skills, so nothing in them can reach the
+ * agent. With an API key, an LLM drafts each eval's tasks and graders; without
+ * one, a well-commented template is written.
  */
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { detectSkills } from '../core/skills';
+import { EVAL_FILE } from '../core/config';
+import { PROJECT_FILE } from '../core/project';
 import { parseEnvFile } from '../utils/env';
 import { resolveGeminiModel, resolveAnthropicModel, resolveOpenAIModel } from '../utils/models';
 
-export async function runInit(dir: string, opts: { force?: boolean } = {}) {
-  const evalPath = path.join(dir, 'eval.yaml');
+/** Where the Eval Project is scaffolded, inside the directory `init` runs in. */
+export const PROJECT_DIR = 'evals';
 
-  if (await fs.pathExists(evalPath)) {
-    if (opts.force) {
-      await fs.remove(evalPath);
-    } else {
-      console.error('  eval.yaml already exists. Use --force to overwrite.');
-      throw new Error('eval.yaml already exists');
-    }
+export async function runInit(dir: string, opts: { force?: boolean } = {}) {
+  const projectDir = path.join(dir, PROJECT_DIR);
+  const projectPath = path.join(projectDir, PROJECT_FILE);
+
+  if (await fs.pathExists(projectPath) && !opts.force) {
+    console.error(`  ${PROJECT_DIR}/${PROJECT_FILE} already exists. Use --force to overwrite.`);
+    throw new Error(`${PROJECT_DIR}/${PROJECT_FILE} already exists`);
   }
 
   console.log('\nskillgrade init\n');
@@ -28,10 +32,24 @@ export async function runInit(dir: string, opts: { force?: boolean } = {}) {
   // Detect skills
   const skills = await detectSkills(dir);
 
+  // An Eval Project is kept apart from the resources it evaluates, so it cannot live inside a skill
+  if (skills.some(s => path.resolve(s.path) === path.resolve(dir))) {
+    console.error('  This directory is itself a skill. An Eval Project is kept apart from the skills it evaluates:');
+    console.error('     run skillgrade init from the directory that holds it (with skills/<name>/SKILL.md under it).\n');
+    throw new Error('Cannot scaffold an Eval Project inside a skill');
+  }
+
   if (skills.length === 0) {
-    console.log('  No SKILL.md found. Creating a generic template.');
-    console.log('     Place a SKILL.md in this directory for better scaffolding.\n');
-    await writeTemplate(evalPath, 'my-skill', 'Describe what the agent should do with this skill.');
+    console.log('  No SKILL.md found. Creating a generic template, with a placeholder skill to evaluate.');
+    console.log('     Add skills/<name>/SKILL.md for better scaffolding.\n');
+    const stub = path.join(dir, 'skills', 'my-skill', 'SKILL.md');
+    if (!await fs.pathExists(stub)) {
+      await fs.outputFile(stub, '---\nname: my-skill\ndescription: Describe what this skill does and when to use it.\n---\n\n# My Skill\n\nDescribe what the agent should do with this skill.\n');
+    }
+    await writeProject(projectDir, [path.join(dir, 'skills')]);
+    await writeEval(projectDir, 'my-skill', await renderEvalTemplate('my-skill-task', 'Describe what the agent should do with this skill.'));
+    console.log(`  Created ${PROJECT_DIR}/ for the skill my-skill.`);
+    console.log(`     Edit ${PROJECT_DIR}/skills/my-skill/${EVAL_FILE}, then run: cd ${PROJECT_DIR} && skillgrade\n`);
     return;
   }
 
@@ -57,54 +75,66 @@ export async function runInit(dir: string, opts: { force?: boolean } = {}) {
 
   const providerLabel: Record<string, string> = { gemini: 'Gemini', anthropic: 'Anthropic', openai: 'OpenAI' };
 
-  if (llmProvider && llmApiKey) {
-    const { Spinner, fmt } = await import('../utils/cli');
-    const spinner = new Spinner('init', `generating eval with ${providerLabel[llmProvider]}`);
-    try {
-      const config = await generateWithLLM(skills, llmApiKey, llmProvider);
-      await fs.writeFile(evalPath, config, 'utf-8');
-      spinner.stop(fmt.green('created eval.yaml'));
-      console.log(`     Review and edit the file, then run: skillgrade\n`);
-      return;
-    } catch (err: any) {
-      spinner.stop(fmt.red(`AI generation failed: ${err.message}`));
-      console.log('     Falling back to template.\n');
-    }
-  } else {
+  if (!llmProvider || !llmApiKey) {
     console.log('  Set GEMINI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY for AI-powered eval generation.\n');
   }
 
-  // Fallback: template-based scaffold
-  const skill = skills[0];
-  const taskName = `test-${skill.name}`;
-  const instruction = extractInstructionHint(skill.skillMd);
-  await writeTemplate(evalPath, taskName, instruction);
-}
+  await writeProject(projectDir, [...new Set(skills.map(s => path.dirname(s.path)))]);
 
-async function writeTemplate(evalPath: string, taskName: string, instruction: string) {
-  const templatePath = path.join(__dirname, '..', '..', 'templates', 'eval.yaml.template');
-  let template: string;
+  for (const skill of skills) {
+    // A skill is named by its directory, and so is its eval's directory in the Eval Project
+    const name = path.basename(skill.path);
+    let evalYml: string | undefined;
 
-  if (await fs.pathExists(templatePath)) {
-    template = await fs.readFile(templatePath, 'utf-8');
-  } else {
-    // Inline fallback if template file not found (e.g., if installed globally)
-    template = getInlineTemplate();
+    if (llmProvider && llmApiKey) {
+      const { Spinner, fmt } = await import('../utils/cli');
+      const spinner = new Spinner('init', `generating eval for ${name} with ${providerLabel[llmProvider]}`);
+      try {
+        evalYml = await generateWithLLM([skill], llmApiKey, llmProvider);
+        spinner.stop(fmt.green(`created ${PROJECT_DIR}/skills/${name}/${EVAL_FILE}`));
+      } catch (err: any) {
+        spinner.stop(fmt.red(`AI generation failed: ${err.message}`));
+        console.log('     Falling back to template.\n');
+      }
+    }
+
+    // Fallback: template-based scaffold
+    evalYml ??= await renderEvalTemplate(`test-${name}`, extractInstructionHint(skill.skillMd));
+    await writeEval(projectDir, name, evalYml);
   }
 
-  const result = template
+  console.log(`  Created ${PROJECT_DIR}/. Review and edit the evals, then run: cd ${PROJECT_DIR} && skillgrade\n`);
+}
+
+/** The `eval-project.yml` for the skills found in `skillDirs` (absolute directories holding skill folders). */
+async function writeProject(projectDir: string, skillDirs: string[]) {
+  const searchPaths = skillDirs.map(d => path.relative(projectDir, d).split(path.sep).join('/') || '.');
+  const template = await readTemplate('eval-project.yml.template', getInlineProjectTemplate());
+  await fs.outputFile(path.join(projectDir, PROJECT_FILE), template.replace(/\{\{SKILLS_PATHS\}\}/g, JSON.stringify(searchPaths)), 'utf-8');
+}
+
+/** A skill's eval: `<project>/skills/<name>/eval.yml`. */
+async function writeEval(projectDir: string, name: string, content: string) {
+  await fs.outputFile(path.join(projectDir, 'skills', name, EVAL_FILE), content, 'utf-8');
+}
+
+async function readTemplate(file: string, inline: string): Promise<string> {
+  const templatePath = path.join(__dirname, '..', '..', 'templates', file);
+  // Inline fallback if the template file is not found (e.g., if installed globally)
+  return await fs.pathExists(templatePath) ? fs.readFile(templatePath, 'utf-8') : inline;
+}
+
+async function renderEvalTemplate(taskName: string, instruction: string): Promise<string> {
+  const template = await readTemplate('eval.yml.template', getInlineTemplate());
+  return template
     .replace(/\{\{TASK_NAME\}\}/g, taskName)
     .replace(/\{\{INSTRUCTION\}\}/g, instruction);
-
-  await fs.writeFile(evalPath, result, 'utf-8');
-  console.log(`  Created eval.yaml.`);
-  console.log(`     Edit the file to define your eval tasks, then run: skillgrade\n`);
 }
 
 /**
  * Extract a reasonable instruction hint from SKILL.md content.
  */
-function extractInstructionHint(skillMd: string): string {
+export function extractInstructionHint(skillMd: string): string {
   // Try to get the first paragraph after the main heading
   const lines = skillMd.split('\n');
   let foundHeading = false;
@@ -142,7 +172,7 @@ function resolveBaseUrl(envValue: string | undefined, fallback: string): string 
 }
 
 /**
- * Generate eval.yaml content using the configured LLM provider
+ * Generate an eval.yml (the `tasks:` of one skill's eval) using the configured LLM provider
  * (Gemini, Anthropic, or OpenAI).
  */
 export async function generateWithLLM(
@@ -156,11 +186,10 @@ export async function generateWithLLM(
 
   const prompt = `You are an expert at creating evaluation tasks for AI agent skills.
 
-Given the following skill definition(s), generate an eval.yaml file that defines 1-2 evaluation tasks to test whether an AI agent correctly discovers and uses the skill.
+Given the following skill definition(s), generate an eval.yml file that defines 1-2 evaluation tasks to test whether an AI agent correctly discovers and uses the skill.
 
 For each task:
 - Write a realistic instruction (what a user would ask the agent to do)
-- Define workspace files if needed (fixture files the agent works on)
 - Write a deterministic grader (shell script that outputs JSON to stdout)
 - Write an LLM rubric (criteria for the LLM judge)
 
@@ -169,7 +198,8 @@ IMPORTANT GRADING RULES:
 - Do NOT use exit codes for scoring. The grader should always exit 0 and report the score in JSON.
 - Use awk for floating point arithmetic (bc is not available in node:20-slim).
 - The "checks" array is optional but recommended for per-check breakdown.
-- For workspace files, only reference files that exist in the skill directory or that the agent will create.
+- The agent starts in an EMPTY workspace: do not assume any input files exist. Tasks must be solvable by creating files from scratch (the author adds fixture files later, as folders, outside this YAML).
+- Do NOT write "version", "defaults", "workspace" or "skill" keys: the file holds only "tasks".
 
 CRITICAL — FILENAME CONSISTENCY:
 - The instruction MUST tell the agent exactly what filenames to create (e.g., "Save the result as output.txt").
@@ -179,30 +209,13 @@ CRITICAL — FILENAME CONSISTENCY:
 
 ${skillSummaries}
 
-Respond with ONLY the eval.yaml content. Use this exact format:
-
-version: "1"
-
-defaults:
-  harness: gemini-cli
-  runtime: docker
-  trials: 5
-  timeout: 300
-  threshold: 0.8
-  docker:
-    base: node:20-slim
+Respond with ONLY the eval.yml content. Use this exact format:
 
 tasks:
-  - name: <descriptive-task-name>
+  - name: <descriptive-task-name>   # a plain name: no slashes
     instruction: |
       <realistic user instruction>
       Save <expected output> as <exact-filename>.
-    workspace:
-      # Files to copy into the agent's workspace (optional).
-      # Use string shorthand or src/dest objects:
-      # - fixtures/app.js                    # copies as app.js
-      # - src: templates/viewer.html
-      #   dest: templates/viewer.html
     graders:
       - type: deterministic
         run: |
@@ -313,19 +326,9 @@ tasks:
   return yamlContent + '\n';
 }
 
-function getInlineTemplate(): string {
-  return `version: "1"
-
-defaults:
-  harness: gemini-cli
-  runtime: docker
-  trials: 5
-  timeout: 300
-  threshold: 0.8
-  docker:
-    base: node:20-slim
-
-tasks:
+/** Used when `templates/eval.yml.template` cannot be found; the same shape, without the comments. */
+export function getInlineTemplate(): string {
+  return `tasks:
   - name: {{TASK_NAME}}
     instruction: |
       {{INSTRUCTION}}
@@ -341,5 +344,21 @@ tasks:
         rubric: |
           TODO: Write evaluation criteria.
         weight: 0.3
+`;
+}
+
+/** Used when `templates/eval-project.yml.template` cannot be found. */
+export function getInlineProjectTemplate(): string {
+  return `defaults:
+  harness: gemini-cli
+  runtime: docker
+  trials: 5
+  timeout: 300
+  threshold: 0.8
+  docker:
+    base: node:20-slim
+
+search_paths:
+  skills: {{SKILLS_PATHS}}
 `;
 }

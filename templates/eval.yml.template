@@ -1,0 +1,56 @@
+# The eval of one skill, in an Eval Project: <eval project>/skills/<skill-name>/eval.yml
+# The skill is the directory this file sits in, so there is no `skill:` key.
+# Defaults (harness, runtime, trials, ...) live in ../../eval-project.yml.
+#
+# Next to this file:
+#   workspace/<task-name>/   files the agent starts with (no folder = empty workspace)
+#   graders/                 scripts that `run:` can call, e.g. `run: bash graders/check.sh`
+#   llm_judges/<name>.md     reusable rubrics, used as `llm_judge: <name>`
+#
+# Usage (from the Eval Project directory):
+#   skillgrade                 Run every eval
+#   skillgrade --validate      Verify graders using reference solutions
+#   skillgrade --smoke         Quick 5-trial run
+#
+# Documentation: https://github.com/mgechev/skillgrade#readme
+
+tasks:
+  - name: {{TASK_NAME}}
+    instruction: |
+      {{INSTRUCTION}}
+
+    # A task can start from another task's workspace instead of repeating files:
+    # workspace:
+    #   - task: other-task            # a task of this eval
+    #   - task: setup@other-skill     # a task of another resource (name@kind:resource if the name is ambiguous)
+
+    graders:
+      - type: deterministic
+        # setup: npm install typescript  # install grader dependencies (optional)
+        run: |
+          # Grader must output JSON: { "score": 0.0-1.0, "details": "...", "checks": [...] }
+          # The agent's workspace is the working directory. Example:
+          # if test -f expected-output.txt; then
+          #   echo '{"score": 1.0, "details": "All checks passed", "checks": [{"name": "file-exists", "passed": true, "message": "Found expected output"}]}'
+          # else
+          #   echo '{"score": 0.0, "details": "Check failed", "checks": [{"name": "file-exists", "passed": false, "message": "Missing expected output"}]}'
+          # fi
+          echo '{"score": 0.0, "details": "TODO: implement grader"}'
+        weight: 0.7
+
+      - type: llm_rubric
+        rubric: |
+          # TODO: Write a rubric for the LLM grader (or move it to llm_judges/<name>.md
+          # and write `llm_judge: <name>` instead of `type` and `rubric`).
+          # Example:
+          # - Did the agent follow the correct workflow?
+          # - Did it use the appropriate tool?
+          # - Was it efficient (minimal commands)?
+        weight: 0.3
+
+    # Optional: reference solution for --validate (a script, relative to this directory)
+    # solution: solution/solve.sh
+
+    # Optional: the answer key. Graders only (SKILLGRADE_INPUT), never the agent.
+    # expected:
+    #   file: output.txt
