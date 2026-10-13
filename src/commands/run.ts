@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { EVAL_FILE, loadEvalConfig, resolveTask } from '../core/config';
 import { TaskFilter, describeSelection, metadataKeys, selectTasks } from '../core/filter';
-import { PROJECT_FILE, Resource, loadProject, testedResources } from '../core/project';
+import { INSTRUCTIONS_SOURCE, PROJECT_FILE, Resource, loadProject, testedResources } from '../core/project';
 import { DockerProvider } from '../providers/docker';
 import { LocalProvider } from '../providers/local';
 import { EvalRunner, EvalRunOptions } from '../evalRunner';
@@ -212,7 +212,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
             await prepareTempTaskDir(resolved, evalDir, tmpTaskDir, tmpGraderDir);
             if (resource.kind === 'instructions') {
                 // Copied as is, under the name this Harness loads, so it actually applies
-                await fs.copy(path.join(resource.dir, 'AGENTS.md'), path.join(tmpTaskDir, capabilitiesOf(agentName).instructionFile));
+                await fs.copy(path.join(resource.dir, INSTRUCTIONS_SOURCE), path.join(tmpTaskDir, capabilitiesOf(agentName).instructionFile));
             }
 
             // Build eval options — pass resolved content directly

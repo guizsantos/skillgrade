@@ -16,6 +16,9 @@ import { EVAL_FILE, LEGACY_EVAL_FILE } from './config';
 
 export const PROJECT_FILE = 'eval-project.yml';
 
+/** The file that makes a directory Project Instructions, whatever Harness it is later delivered to. */
+export const INSTRUCTIONS_SOURCE = 'AGENTS.md';
+
 export type ResourceKind = 'skill' | 'instructions';
 
 /**
@@ -26,7 +29,7 @@ export type ResourceKind = 'skill' | 'instructions';
  */
 const KINDS: Record<string, { kind: ResourceKind; marker: string; frontmatterName: boolean }> = {
     skills: { kind: 'skill', marker: 'SKILL.md', frontmatterName: true },
-    instructions: { kind: 'instructions', marker: 'AGENTS.md', frontmatterName: false },
+    instructions: { kind: 'instructions', marker: INSTRUCTIONS_SOURCE, frontmatterName: false },
 };
 
 export interface Project {
