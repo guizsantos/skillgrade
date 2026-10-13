@@ -11,6 +11,7 @@ export interface EvalGraderConfig {
     setup?: string;                               // commands to install grader dependencies (runs during image build)
     run?: string;                                 // inline script or file path (deterministic)
     rubric?: string;                              // inline rubric or file path (llm_rubric)
+    llm_judge?: string;                           // name of a reusable Judge in the eval's llm_judges/ (instead of a rubric)
     llm_model?: string;                           // llm_rubric: model override, e.g. 'claude-sonnet-5' or 'gemini-3-flash-preview'
     llm_provider?: LlmProvider;                   // llm_rubric: which LLM API scores it (default: 'gemini')
     weight: number;
