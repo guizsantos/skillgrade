@@ -65,7 +65,7 @@ function trialView(t: TrialResult) {
 async function graderView(g: ResolvedGrader, baseDirs: string[]) {
     const out = { type: g.type, weight: g.weight ?? 1 };
     if (g.type === 'llm_rubric') {
-        return { ...out, rubric: g.rubric || '(skillgrade default rubric)', provider: g.provider, model: g.model };
+        return { ...out, rubric: g.rubric || '(skillgrade default rubric)', llm_provider: g.llm_provider, llm_model: g.llm_model };
     }
     let run = g.run || '';
     for (const ref of new Set(run.match(/[\w./-]+\.\w{1,4}/g) || [])) {

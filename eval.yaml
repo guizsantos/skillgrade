@@ -4,13 +4,13 @@
 # the skillgrade-setup and skillgrade-graders skills.
 #
 # Run:
-#   GEMINI_API_KEY=your-key skillgrade --smoke
+#   GEMINI_API_KEY=your-key JEV_API_KEY=your-key skillgrade --smoke
 
 version: "1"
 
 defaults:
-  agent: gemini
-  provider: docker
+  harness: gemini-cli
+  runtime: docker
   trials: 5
   timeout: 600
   threshold: 0.7
@@ -63,7 +63,18 @@ tasks:
           - Does it include both deterministic and llm_rubric graders?
           - Is the deterministic grader checking concrete outcomes?
           - Is the LLM rubric focused on qualitative assessment?
-        weight: 0.3
+        weight: 0.2
+
+      # Jev (TypeSafe) scores one narrow judgment against fixed levels instead of
+      # writing a free-form critique: keep its rubric to a single question.
+      # Needs JEV_API_KEY.
+      - type: llm_rubric
+        llm_provider: jev
+        rubric: |
+          Are the task instructions in the generated eval.yaml specific and
+          actionable: could an agent that never saw SKILL.md tell exactly what
+          to produce and where to save it?
+        weight: 0.1
 
   # ── Task 2: Write a deterministic grader ───────────────────
   # Tests whether the agent can follow the skillgrade-graders skill

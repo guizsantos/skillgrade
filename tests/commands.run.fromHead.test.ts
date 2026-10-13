@@ -16,8 +16,8 @@ async function scratch(agent = 'cat .agents/skills/greeter/SKILL.md > out.txt', 
     await fs.outputFile(path.join(repo, 'skills', 'greeter', 'SKILL.md'), '---\nname: greeter\ndescription: d\n---\nv1\n');
     await fs.outputFile(path.join(evalDir, 'eval.yaml'), `skill: ../../skills/greeter
 defaults:
-  agent: command
-  provider: local
+  harness: command
+  runtime: local
   trials: 1
   command: "${agent}"
 tasks:
@@ -45,14 +45,14 @@ describe('uncommitted eval inputs', () => {
     it('stop a run before any task runs', async () => {
         const s = await scratch();
         await s.dirtySkill();
-        await expect(runEvals(s.evalDir, { agent: 'command', output: s.output })).rejects.toThrow(/Uncommitted changes/);
+        await expect(runEvals(s.evalDir, { harness: 'command', output: s.output })).rejects.toThrow(/Uncommitted changes/);
         expect(await s.results()).toEqual([]);
     });
 
     it('--from-head evaluates HEAD from a worktree, files results here, and removes the worktree', async () => {
         const s = await scratch();
         await s.dirtySkill();
-        await runEvals(s.evalDir, { agent: 'command', output: s.output, fromHead: true });
+        await runEvals(s.evalDir, { harness: 'command', output: s.output, fromHead: true });
 
         const [report] = await s.results();
         expect(report.trials[0].reward).toBe(1);  // the agent saw v1, the committed skill
@@ -67,7 +67,7 @@ describe('uncommitted eval inputs', () => {
 
     it('a clean tree runs as is, without a worktree', async () => {
         const s = await scratch();
-        await runEvals(s.evalDir, { agent: 'command', output: s.output, fromHead: true });
+        await runEvals(s.evalDir, { harness: 'command', output: s.output, fromHead: true });
         const [report] = await s.results();
         expect(report.provenance.from_head).toBeUndefined();
         expect(report.trials[0].reward).toBe(1);
@@ -76,15 +76,15 @@ describe('uncommitted eval inputs', () => {
     it('--validate grades the working tree: exempt from the check, and rejects --from-head', async () => {
         const s = await scratch();
         await s.dirtySkill();
-        await expect(runEvals(s.evalDir, { agent: 'command', output: s.output, validate: true, fromHead: true }))
+        await expect(runEvals(s.evalDir, { harness: 'command', output: s.output, validate: true, fromHead: true }))
             .rejects.toThrow(/--from-head is for real runs/);
-        await expect(runEvals(s.evalDir, { agent: 'command', output: s.output, validate: true })).resolves.toBeUndefined();
+        await expect(runEvals(s.evalDir, { harness: 'command', output: s.output, validate: true })).resolves.toBeUndefined();
     });
 
     it('are not checked outside a git repo, where --from-head is an error', async () => {
         const s = await scratch(undefined, false);
-        await expect(runEvals(s.evalDir, { agent: 'command', output: s.output, fromHead: true })).rejects.toThrow(/needs a git repo/);
-        await runEvals(s.evalDir, { agent: 'command', output: s.output });
+        await expect(runEvals(s.evalDir, { harness: 'command', output: s.output, fromHead: true })).rejects.toThrow(/needs a git repo/);
+        await runEvals(s.evalDir, { harness: 'command', output: s.output });
         expect(await s.results()).toHaveLength(1);
     });
 
@@ -93,7 +93,7 @@ describe('uncommitted eval inputs', () => {
         await s.dirtySkill();
         const cli = path.resolve(__dirname, '..', 'src', 'skillgrade.ts');
         const p = spawn(process.execPath, ['-r', require.resolve('ts-node/register/transpile-only'), cli,
-            '--from-head', '--agent=command', `--output=${s.output}`],
+            '--from-head', '--harness=command', `--output=${s.output}`],
             { cwd: s.evalDir, stdio: 'ignore', env: { ...process.env, TS_NODE_PROJECT: path.resolve(__dirname, '..', 'tsconfig.json') } });
         const exited = new Promise<number | null>(resolve => p.on('exit', code => resolve(code)));
         let wt: string[] = [];

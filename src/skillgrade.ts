@@ -39,6 +39,11 @@ async function main() {
         .map(a => a.slice(`--${name}=`.length));
     const getFlag = (name: string) => getFlags(name)[0];
     const hasFlag = (name: string) => args.includes(`--${name}`);
+    const renamedFlag = (name: string, old: string) => {
+        const value = getFlag(old);
+        if (value !== undefined) console.error(`  warning  --${old} is deprecated, use --${name}`);
+        return getFlag(name) ?? value;
+    };
 
     if (command === '--help' || command === '-h') {
         printHelp();
@@ -113,9 +118,9 @@ async function main() {
         ci: hasFlag('ci'),
         threshold: getFlag('threshold') ? parseFloat(getFlag('threshold')!) : undefined,
         preset,
-        agent: getFlag('agent'),
+        harness: renamedFlag('harness', 'agent'),
         model: getFlag('model'),
-        provider: getFlag('provider'),
+        runtime: renamedFlag('runtime', 'provider'),
         grader: getFlag('grader'),
         output: outputDir,
         acpCommand: getFlag('acp-command'),
@@ -160,13 +165,14 @@ function printHelp() {
     --grader=TYPE      Run only graders of this type (deterministic|llm_rubric)
     --trials=N         Override trial count (overrides preset)
     --parallel=N       Run trials concurrently
-    --agent=gemini|claude|codex|acp|opencode|command   Override agent (default: auto-detect from API key)
-    --model=NAME       Model the agent answers with (gemini, claude, codex,
-                       opencode).
-                       Default: whatever the agent CLI is configured to use.
-    --provider=docker|local Override provider (default: docker)
+    --harness=gemini-cli|claude-code|codex|acp|opencode|command
+                       The agent CLI under test (default: auto-detect from API key)
+    --model=NAME       Model the harness answers with (gemini-cli, claude-code,
+                       codex, opencode).
+                       Default: whatever the harness is configured to use.
+    --runtime=docker|local  Where trials run (default: docker)
     --acp-command=CMD  ACP agent command (e.g., "gemini --acp")
-    --command=CMD      Command to run for the 'command' agent (e.g., "node mycli.js")
+    --command=CMD      Command to run for the 'command' harness (e.g., "node mycli.js")
     --opencode-agent=NAME   OpenCode agent (build|plan|explore)
     --opencode-model=MODEL OpenCode model (provider/model format)
     --output=DIR       Output directory for reports and temp files
@@ -192,8 +198,8 @@ function printHelp() {
     skillgrade --filter=tags=smoke --not-filter=tags=flaky
     skillgrade --filter-pattern='^easy--' --list   # preview a selection
     skillgrade --regression --ci   # CI regression with 30 trials
-    skillgrade --agent=acp --acp-command="gemini --acp"  # use ACP-compatible agent
-    skillgrade --agent=claude --model=opus         # compare models on one suite
+    skillgrade --harness=acp --acp-command="gemini --acp"  # use ACP-compatible agent
+    skillgrade --harness=claude-code --model=opus   # compare models on one suite
     skillgrade --smoke --from-head # evaluate HEAD while you keep editing the skill
     skillgrade preview browser     # browse every skill's results at http://localhost:3847
 `);
