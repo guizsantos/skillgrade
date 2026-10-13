@@ -327,13 +327,14 @@ export async function runEvals(dir: string, opts: RunOptions) {
                     reports.push(report);
 
                     // One Trial Record per trial, beside the report
-                    if (!harnessVersions.has(agentName)) harnessVersions.set(agentName, harnessVersion(agentName, providerName));
+                    const versionKey = `${agentName}:${providerName}`;
+                    if (!harnessVersions.has(versionKey)) harnessVersions.set(versionKey, harnessVersion(agentName, providerName));
                     await appendTrialRecords(resultsDir, report.provenance!.run_id, buildTrialRecords(report, {
                         resource,
                         provenance: report.provenance!,
                         harness: agentName,
-                        harnessVersion: harnessVersions.get(agentName)!,
-                        llm: modelName,
+                        harnessVersion: harnessVersions.get(versionKey)!,
+                        llm: agentConfig.opencode?.model ?? modelName,
                         delivery: deliveryFor(resource.kind),
                         date: now,
                     }));

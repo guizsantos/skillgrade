@@ -112,11 +112,11 @@ describe('Trial Records emitted by a run', () => {
             process.env.PATH = `${bin}${path.delimiter}${savedPath}`;
 
             const fx = await evalProject(ctx => greeterProject(fakeAgent({ record: ctx.record }), [task('say'), task('wave')]));
-            await fx.run({ harness: 'opencode', trials: 2 });
+            await fx.run({ harness: 'opencode', openCodeModel: 'prov/model-x', trials: 2 });
 
             const records = await fx.trialRecords('greeter');
             expect(records).toHaveLength(4);
-            for (const r of records) expect(r).toMatchObject({ harness: 'opencode', harness_version: '9.9.9' });
+            for (const r of records) expect(r).toMatchObject({ harness: 'opencode', harness_version: '9.9.9', llm: 'prov/model-x' });
         });
 
         it('records harness_version "unknown" rather than leaving it out when the Harness has no version to report', async () => {
