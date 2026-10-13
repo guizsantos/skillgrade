@@ -105,6 +105,10 @@ export interface EvalProjectFixture {
     ran(): Promise<boolean>;
     /** The reports written for one resource's results. */
     reports(resource: string): Promise<EvalReport[]>;
+    /** Names of the `<run_id>.trials.jsonl` files written beside one resource's reports. */
+    trialRecordFiles(resource: string): Promise<string[]>;
+    /** Every Trial Record line written for one resource, parsed. */
+    trialRecords(resource: string): Promise<Record<string, any>[]>;
     /** `runEvals` on the project with the local runtime and the command harness. */
     run(opts?: Partial<RunOptions>): Promise<void>;
     git(...args: string[]): string;
@@ -138,7 +142,18 @@ export async function evalProject(
         async reports(resource) {
             const dir = path.join(output, resource, 'results');
             if (!await fs.pathExists(dir)) return [];
-            return Promise.all((await fs.readdir(dir)).sort().map(f => fs.readJson(path.join(dir, f))));
+            return Promise.all((await fs.readdir(dir)).filter(f => f.endsWith('.json')).sort().map(f => fs.readJson(path.join(dir, f))));
+        },
+        async trialRecordFiles(resource) {
+            const dir = path.join(output, resource, 'results');
+            if (!await fs.pathExists(dir)) return [];
+            return (await fs.readdir(dir)).filter(f => f.endsWith('.trials.jsonl')).sort();
+        },
+        async trialRecords(resource) {
+            const dir = path.join(output, resource, 'results');
+            const files = await fx.trialRecordFiles(resource);
+            const lines = (await Promise.all(files.map(f => fs.readFile(path.join(dir, f), 'utf-8')))).flatMap(t => t.split('\n').filter(Boolean));
+            return lines.map(l => JSON.parse(l));
         },
         run: (o = {}) => runEvals(fx.projectDir, { harness: 'command', runtime: 'local', output, ...o }),
         git: (...args) => git(repo, ...args),
