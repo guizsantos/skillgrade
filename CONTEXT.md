@@ -19,7 +19,7 @@ _Avoid_: AGENT.md, AGENTS.md (those name files, not the concept)
 A file always loaded into an agent's context for a project, such as `AGENTS.md`, `CLAUDE.md` or `GEMINI.md`.
 
 **Prompt**:
-A reusable prompt template held by a platform, with variables. A task supplies the variable values, the expected results and the graders.
+A reusable prompt template held by a platform, with variables. A task supplies the variable values (`variables:`, over the project-wide ones in the Project File), the expected results and the graders. The rendered Prompt is what the agent is asked; a Prompt task's own `instruction` is optional and follows it.
 
 **Harness**:
 The coding-agent CLI or runtime that runs a trial (Claude Code, Codex, Gemini CLI, opencode, ...). Scores are never comparable across Harnesses, just as they are not across LLMs.
@@ -51,7 +51,7 @@ One scenario in an Eval, with expected results, graders and a solution. Its work
 A reusable LLM-grader definition under `llm_judges/`, referenced from a grader by name (`llm_judge: judge-name`).
 
 **Resource Name**:
-The directory name of a Static Resource. Its frontmatter `name:` is required and must equal it; a missing or different name fails loudly. Names are unique within a kind, not across kinds. Project Instructions are exempt: they carry no frontmatter, and their name is the directory name only.
+The directory name of a Static Resource (for a Prompt, its file name without `.md`). Its frontmatter `name:` is required and must equal it; a missing or different name fails loudly. Names are unique within a kind, not across kinds. Project Instructions are exempt: they carry no frontmatter, and their name is the directory name only.
 
 **Task Reference**:
 `task: name` resolves only within the same Eval, and an unknown name errors with a project-wide "did you mean `name@skills:other`?" hint. `task: name@resource` resolves across the whole project when `resource` is unique, and errors when it is ambiguous across kinds. The full form is `task: name@kind:resource`.

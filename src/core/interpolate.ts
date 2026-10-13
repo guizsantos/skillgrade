@@ -5,7 +5,7 @@
  * Loops, conditionals and macros are not supported.
  */
 
-const PLACEHOLDER = /\{\{\s*([\w.-]+)\s*\}\}/g;
+const PLACEHOLDER = /\{\{\s*([\w-]+)\s*\}\}/g;
 
 /**
  * Replace each `{{name}}` in `template` with its value from `variables`.
