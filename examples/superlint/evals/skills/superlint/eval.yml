@@ -1,0 +1,42 @@
+# The eval of the `superlint` skill. The resource is the directory this file
+# sits in (skills/superlint/), so there is no `skill:` key.
+#
+# This example demonstrates:
+# - A task workspace: the folder workspace/fix-linting-errors/ is copied into the
+#   agent's working directory (a broken app.js, and the tool the skill describes)
+# - A deterministic grader kept as a script in graders/
+# - An inline LLM rubric for qualitative assessment
+# - A reference solution, so `skillgrade --validate` can check the grader
+
+tasks:
+  - name: fix-linting-errors
+    instruction: |
+      Our internal app.js violates our coding standards (double quotes, var usage).
+      Use our proprietary superlint tool (./bin/superlint) to fix these issues.
+
+      ## Mandatory Workflow
+
+      1. Check — Run `./bin/superlint check` to identify issues
+      2. Fix — Run `./bin/superlint fix --target app.js` to apply corrections
+      3. Verify — Run `./bin/superlint verify` to finalize and generate `.superlint-passed`
+
+    graders:
+      - type: deterministic
+        run: bash graders/check.sh
+        weight: 0.7
+
+      - type: llm_rubric
+        rubric: |
+          Evaluate the agent's approach:
+
+          Workflow Compliance (0-0.5):
+          - Did the agent follow check → fix → verify?
+          - Did it use superlint (not eslint or manual edits)?
+
+          Efficiency (0-0.5):
+          - Completed in ≤5 commands?
+          - No unnecessary trial-and-error?
+        weight: 0.3
+
+    # Used by `skillgrade --validate`: runs in the workspace in place of the agent
+    solution: solution/solve.sh

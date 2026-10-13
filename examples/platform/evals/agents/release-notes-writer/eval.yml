@@ -1,0 +1,50 @@
+# An Agent Definition's eval. The definition runs as the top-level agent where the
+# harness can do that (claude-code, opencode: agent_invocation "subagent"), and is
+# delivered as Project Instructions elsewhere ("project_instruction").
+tasks:
+  - name: write-notes
+    instruction: |
+      Write the release notes for the changes listed in changes.txt.
+      Save them as NOTES.md.
+
+    graders:
+      - type: deterministic
+        run: |
+          passed=0
+          grep -qi "csv export" NOTES.md 2>/dev/null && passed=$((passed + 1))
+          grep -qi "empty" NOTES.md 2>/dev/null && passed=$((passed + 1))
+          # Internal changes stay out of user-facing notes
+          test -f NOTES.md && ! grep -qi "dependenc" NOTES.md && passed=$((passed + 1))
+          score=$(awk "BEGIN {printf \"%.2f\", $passed/3}")
+          echo "{\"score\":$score,\"details\":\"$passed/3 checks passed\"}"
+        weight: 0.7
+
+      - type: llm_rubric
+        rubric: |
+          Are the notes written for end users, in plain words, in Markdown,
+          without mentioning the internal change (the dependency bump)?
+        weight: 0.3
+
+    solution: solution/write-notes.sh
+
+  # This task starts from the workspace of `write-notes` (changes.txt) instead of repeating it.
+  # `name@resource` would borrow from another resource's eval, `name@kind:resource` when
+  # that name is ambiguous.
+  - name: one-line-notes
+    workspace:
+      - task: write-notes
+    instruction: |
+      Write the release notes for the changes listed in changes.txt as a single line.
+      Save it as NOTES.md.
+
+    graders:
+      - type: deterministic
+        run: |
+          lines=$(grep -c . NOTES.md 2>/dev/null)
+          if [ "${lines:-0}" = "1" ]; then
+            echo '{"score":1,"details":"NOTES.md is a single line"}'
+          else
+            echo '{"score":0,"details":"NOTES.md is missing, or is not exactly one line"}'
+          fi
+
+    solution: solution/one-line-notes.sh

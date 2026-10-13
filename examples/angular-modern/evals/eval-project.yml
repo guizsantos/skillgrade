@@ -1,0 +1,17 @@
+# Angular Modern Syntax Example (Advanced): an Eval Project for one Skill.
+#
+# Run it from this directory:
+#   cd examples/angular-modern/evals
+#   GEMINI_API_KEY=your-key skillgrade --smoke
+
+defaults:
+  harness: gemini-cli
+  runtime: docker
+  trials: 5
+  timeout: 600
+  threshold: 0.6
+  docker:
+    base: node:20-slim
+
+search_paths:
+  skills: ["../skills"]

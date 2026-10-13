@@ -1,0 +1,32 @@
+# Platform Example: an Eval Project holding one resource of each kind.
+#
+#   skills/conventional-commits     a Skill
+#   agents/release-notes-writer.md  an Agent Definition (one file)
+#   instructions/team-conventions   Project Instructions (AGENTS.md)
+#   prompts/release-summary.md      a Prompt, with {{variables}}
+#
+# Run it from this directory:
+#   cd examples/platform/evals
+#   ANTHROPIC_API_KEY=your-key skillgrade --smoke
+
+defaults:
+  harness: claude-code
+  runtime: docker
+  trials: 5
+  timeout: 300
+  threshold: 0.8
+  docker:
+    base: node:20-slim
+
+# Where each kind is found, relative to this file. A resource's kind is the key it
+# is found under, and its name is its directory's name (for a one-file resource,
+# its file's name without `.md`).
+search_paths:
+  skills: ["../skills"]
+  agents: ["../agents"]
+  instructions: ["../instructions"]
+  prompts: ["../prompts"]
+
+# Prompt variables shared by every Prompt task; a task's own `variables:` win.
+variables:
+  product: Acme Reports

@@ -1,0 +1,33 @@
+# The eval of the `angular-modern-apis` skill.
+#
+# This example demonstrates:
+# - A JavaScript grader doing static analysis (graders/check-modern-apis.js)
+# - Multi-check scoring with partial credit (5 checks, each worth 0.2)
+# - A reusable Judge: `llm_judge: migration-quality` loads llm_judges/migration-quality.md
+#   instead of an inline rubric
+# - A reference solution for `skillgrade --validate`
+#
+# The task's workspace is workspace/modernize-component/ (named after the task).
+
+tasks:
+  - name: modernize-component
+    instruction: |
+      The file `src/app/user-profile.component.ts` uses legacy Angular APIs.
+      Modernize it according to our coding standards in the angular-modern-apis skill.
+
+      Specifically:
+      1. Replace @Input() with signal-based input()
+      2. Replace @Output() + EventEmitter with signal-based output()
+      3. Replace constructor injection with inject()
+      4. Replace *ngIf/*ngFor with @if/@for built-in control flow
+      5. Remove CommonModule import (not needed with built-in control flow)
+
+    graders:
+      - type: deterministic
+        run: node graders/check-modern-apis.js
+        weight: 0.7
+
+      - llm_judge: migration-quality    # the rubric is llm_judges/migration-quality.md
+        weight: 0.3
+
+    solution: solution/solve.sh

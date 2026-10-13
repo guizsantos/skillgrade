@@ -1,0 +1,18 @@
+# A Project Instructions eval. AGENTS.md is copied into the agent's workspace under the
+# file name its harness loads (CLAUDE.md for claude-code, GEMINI.md for gemini-cli, ...),
+# so the task never mentions the conventions: it only passes if the agent followed them.
+tasks:
+  - name: create-script
+    instruction: |
+      Create hello.js, a script that prints "hello world" with console.log.
+
+    graders:
+      - type: deterministic
+        run: |
+          passed=0
+          [ "$(head -n 1 hello.js 2>/dev/null)" = "// Team: platform" ] && passed=$((passed + 1))
+          test -f hello.js && ! grep -q "var " hello.js && passed=$((passed + 1))
+          score=$(awk "BEGIN {printf \"%.2f\", $passed/2}")
+          echo "{\"score\":$score,\"details\":\"$passed/2 conventions followed\"}"
+
+    solution: solution/solve.sh

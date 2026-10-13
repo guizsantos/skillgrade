@@ -461,7 +461,7 @@ async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
     if (resources.length === 0) {
         throw new Error(`No evals in ${dir}: add <kind>/<name>/${EVAL_FILE} for a resource found in search_paths`);
     }
-    if (log) kv('skills', resources.filter(r => r.kind === 'skill').map(r => r.name).join(', '));
+    if (log) kv('resources', resources.map(r => `${r.kind}:${r.name}`).join(', '));
 
     // Select which of the tasks to run: by name, by name pattern, by metadata. A
     // selection that does not fit one resource's tasks just leaves that one out,
