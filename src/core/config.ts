@@ -59,7 +59,30 @@ export async function loadEvalConfig(evalDir: string, projectDefaults: Record<st
         raw.defaults = mergeDefaults(projectDefaults, raw.defaults);
     }
 
-    return validateConfig(raw);
+    const config = validateConfig(raw);
+    await checkJudges(config, evalDir);
+    return config;
+}
+
+/** Where a resource's reusable Judges are, inside its directory of the Eval Project. */
+export const JUDGES_DIR = 'llm_judges';
+export const judgeFile = (evalDir: string, name: string) => path.join(evalDir, JUDGES_DIR, `${name}.md`);
+
+/** Every `llm_judge:` names a definition that exists, so a bad name fails before any trial runs. */
+async function checkJudges(config: EvalConfig, evalDir: string) {
+    for (const task of config.tasks) {
+        for (const g of task.graders) {
+            if (g.llm_judge === undefined) continue;
+            const file = judgeFile(evalDir, g.llm_judge);
+            const stat = await fs.stat(file).catch(() => null);
+            if (!stat?.isFile()) {
+                throw new Error(`${path.basename(evalDir)}: task "${task.name}" uses llm_judge "${g.llm_judge}", but there is no ${JUDGES_DIR}/${g.llm_judge}.md in ${evalDir}`);
+            }
+            if (!(await fs.readFile(file, 'utf-8')).trim()) {
+                throw new Error(`${path.basename(evalDir)}: llm_judge "${g.llm_judge}" is empty (${file}); a judge needs a rubric`);
+            }
+        }
+    }
 }
 
 /** `own` over `base`, one level deeper for the nested settings. */
@@ -201,11 +224,23 @@ function validateConfig(raw: any): EvalConfig {
                 if (g.llm_provider && !VALID_LLM_PROVIDERS.includes(g.llm_provider)) {
                     throw new Error(`Task "${t.name}" grader has invalid llm_provider "${g.llm_provider}", must be one of ${VALID_LLM_PROVIDERS.join(', ')}`);
                 }
+                if (g.llm_judge !== undefined) {
+                    if (typeof g.llm_judge !== 'string' || !/^[\w][\w.-]*$/.test(g.llm_judge)) {
+                        throw new Error(`Task "${t.name}" grader has an invalid llm_judge ${JSON.stringify(g.llm_judge)}: it must be the plain name of a file in ${JUDGES_DIR}/`);
+                    }
+                    if (g.rubric !== undefined) {
+                        throw new Error(`Task "${t.name}" grader has both "rubric" and "llm_judge": the judge is the rubric, use one`);
+                    }
+                    if (g.type !== undefined && g.type !== 'llm_rubric') {
+                        throw new Error(`Task "${t.name}" grader has llm_judge but type "${g.type}": a judge is an llm_rubric grader`);
+                    }
+                }
                 return {
-                    type: g.type,
+                    type: g.llm_judge !== undefined ? 'llm_rubric' : g.type,
                     setup: g.setup,
                     run: g.run,
                     rubric: g.rubric,
+                    llm_judge: g.llm_judge,
                     llm_model: g.llm_model,
                     llm_provider: g.llm_provider,
                     weight: g.weight ?? 1.0,
@@ -282,7 +317,9 @@ export async function resolveTask(
             if (g.type === 'deterministic' && g.run) {
                 resolved.run = await resolveFileOrInline(g.run, baseDirs);
             }
-            if (g.type === 'llm_rubric' && g.rubric) {
+            if (g.llm_judge !== undefined) {
+                resolved.rubric = (await fs.readFile(judgeFile(baseDir, g.llm_judge), 'utf-8')).trim();
+            } else if (g.type === 'llm_rubric' && g.rubric) {
                 resolved.rubric = await resolveFileOrInline(g.rubric, baseDirs);
             }
             return resolved;
