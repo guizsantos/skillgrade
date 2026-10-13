@@ -73,7 +73,7 @@ describe('running a Project Instructions eval from an Eval Project', () => {
         async function fakeCli(name: string, command: string) {
             await fs.ensureDir(bin);
             // stdin is closed: the real CLIs are not piped their prompt
-            await fs.outputFile(path.join(bin, name), `#!/bin/sh\n${command} < /dev/null\n`, { mode: 0o755 });
+            await fs.outputFile(path.join(bin, name), `#!/bin/sh\n[ "$1" = "--version" ] && { echo "1.2.3"; exit 0; }\n${command} < /dev/null\n`, { mode: 0o755 });
             process.env.PATH = `${bin}${path.delimiter}${originalPath}`;
         }
 

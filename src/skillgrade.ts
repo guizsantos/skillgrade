@@ -128,6 +128,7 @@ async function main() {
         openCodeAgent: getFlag('opencode-agent'),
         openCodeModel: getFlag('opencode-model'),
         fromHead: hasFlag('from-head'),
+        force: hasFlag('force'),
     });
 
     if (openPreview) {
@@ -182,6 +183,8 @@ function printHelp() {
                        inputs (skill, eval dir, imported YAML, workspace files)
                        stop it. This evaluates HEAD from a temporary git
                        worktree instead, leaving them out (not with --validate)
+    --force            Run an Agent Definition even though the harness ignores some of
+                       its keys; results are recorded as degraded, with those keys
     --ci               CI mode: exit non-zero if below threshold
     --threshold=0.8    Pass rate threshold for CI mode
     --preview          Open CLI results after running

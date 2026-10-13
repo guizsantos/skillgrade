@@ -12,6 +12,7 @@ import * as path from 'path';
 import type { Provenance } from './provenance';
 import type { EvalReport } from '../types';
 import type { Resource } from './project';
+import { capabilitiesOf } from '../agents/capabilities';
 
 /** Bump when a record's shape changes incompatibly. */
 export const TRIAL_RECORD_SCHEMA_VERSION = 1;
@@ -35,7 +36,7 @@ export interface Delivery {
     agent_invocation: string | null;
     /** `full` | `degraded`. */
     harness_compatibility: string;
-    /** Extension point: keys the Harness ignored, set when `degraded`. */
+    /** Keys the Harness ignored; set only when `degraded`. */
     ignored_keys?: string[];
 }
 
@@ -71,10 +72,17 @@ export interface TrialRecordContext {
     date: Date;
 }
 
-/** The delivery values for a resource kind. Extension point for Agent Definitions. */
-export function deliveryFor(kind: string): Delivery {
-    void kind;  // every kind landed so far is a Skill: nothing to deliver as an agent, nothing unsupported
-    return { agent_invocation: null, harness_compatibility: 'full' };
+/**
+ * The delivery values for a resource kind on a Harness. Only an Agent Definition
+ * has an invocation (from the capability table). `ignoredKeys` are the keys a
+ * forced run went ahead with despite the Harness not supporting them.
+ */
+export function deliveryFor(kind: string, harness: string, ignoredKeys: string[] = []): Delivery {
+    if (kind !== 'agent') return { agent_invocation: null, harness_compatibility: 'full' };
+    const agent_invocation = capabilitiesOf(harness).invocation;
+    return ignoredKeys.length
+        ? { agent_invocation, harness_compatibility: 'degraded', ignored_keys: ignoredKeys }
+        : { agent_invocation, harness_compatibility: 'full' };
 }
 
 /** Deterministic: the same run, eval and trial always get the same id. */

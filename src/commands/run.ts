@@ -8,12 +8,12 @@ import * as path from 'path';
 import * as os from 'os';
 import { EVAL_FILE, loadEvalConfig, resolveTask } from '../core/config';
 import { TaskFilter, describeSelection, metadataKeys, selectTasks } from '../core/filter';
-import { INSTRUCTIONS_SOURCE, PROJECT_FILE, Resource, loadProject, testedResources } from '../core/project';
+import { INSTRUCTIONS_SOURCE, PROJECT_FILE, Resource, frontmatter, loadProject, promptBody, testedResources } from '../core/project';
 import { DockerProvider } from '../providers/docker';
 import { LocalProvider } from '../providers/local';
 import { EvalRunner, EvalRunOptions } from '../evalRunner';
 import { createAgent, AgentConfig, harnessName } from '../agents/registry';
-import { capabilitiesOf } from '../agents/capabilities';
+import { capabilitiesOf, unsupportedKeys } from '../agents/capabilities';
 import { BaseAgent, EvalReport } from '../types';
 import { EvalConfig, EvalTaskConfig, ResolvedTask } from '../core/config.types';
 import { parseEnvFile } from '../utils/env';
@@ -45,6 +45,7 @@ interface RunOptions {
     command?: string;    // command agent command (e.g., "node mycli.js")
     openCodeAgent?: string;   // OpenCode agent (build|plan|explore)
     openCodeModel?: string;   // OpenCode model (provider/model format)
+    force?: boolean;     // run an Agent Definition on a Harness that ignores some of its keys, recorded as degraded
     fromHead?: boolean;  // with uncommitted inputs: evaluate HEAD from a worktree, leaving them out
 }
 
@@ -162,6 +163,14 @@ export async function runEvals(dir: string, opts: RunOptions) {
             provenanceOf.set(t, provenance);
         }
 
+        // Before any trial: definitions the Harness only partly understands stop the run, unless forced.
+        // --validate runs no agent, so there is nothing for a Harness to ignore.
+        const ignoredKeys = opts.validate ? new Map<string, string[]>() : await compatibilityGate(targets, opts, env);
+        for (const [id, keys] of ignoredKeys) {
+            const [name, harness] = id.split('|');
+            console.error(`  ${fmt.red('warning')}  --force: ${name} in harness ${harness} ignores ${keys.join(', ')}; recorded as degraded`);
+        }
+
         // Track CI results
         const reports: EvalReport[] = [];
         let allPassed = true;
@@ -189,20 +198,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
             const trials = opts.trials ?? resolved.trials;
             const parallel = opts.parallel ?? 1;
 
-            // Pick the harness: CLI flag > task-level override > auto-detect from API key > default
-            let agentName = opts.harness ? harnessName(opts.harness) : resolved.harness;
-            if (!opts.harness && !taskDef.harness) {
-                // No explicit override — auto-detect from available API keys
-                const hasGemini = !!env.GEMINI_API_KEY;
-                const hasAnthropic = !!env.ANTHROPIC_API_KEY;
-                const hasOpenAI = !!env.OPENAI_API_KEY;
-                const keyCount = [hasGemini, hasAnthropic, hasOpenAI].filter(Boolean).length;
-                if (keyCount === 1) {
-                    if (hasAnthropic) agentName = 'claude-code';
-                    else if (hasOpenAI) agentName = 'codex';
-                    else if (hasGemini) agentName = 'gemini-cli';
-                }
-            }
+            const agentName = pickHarness(opts, taskDef, resolved, env);
             const providerName = opts.runtime || resolved.runtime;
             // The task dir is laid out for these: the Dockerfile installs the harness that
             // runs, and workspace files go where the runtime that runs expects them
@@ -217,6 +213,19 @@ export async function runEvals(dir: string, opts: RunOptions) {
             if (resource.kind === 'instructions') {
                 // Copied as is, under the name this Harness loads, so it actually applies
                 await fs.copy(path.join(resource.dir, INSTRUCTIONS_SOURCE), path.join(tmpTaskDir, capabilitiesOf(agentName).instructionFile));
+            }
+            // An Agent Definition is delivered the way the capability table says for this Harness
+            const caps = capabilitiesOf(agentName);
+            const asSubagent = resource.kind === 'agent' && caps.invocation === 'subagent';
+            if (resource.kind === 'agent') {
+                const definition = await fs.readFile(resource.dir, 'utf-8');
+                if (asSubagent) {
+                    // Where the Harness discovers named agents, whole: its frontmatter is its native format
+                    await fs.outputFile(path.join(tmpTaskDir, caps.agentsDir!, `${resource.name}.md`), definition);
+                } else {
+                    // The prompt alone, as Project Instructions: keys with nothing to act on are not instructions
+                    await fs.outputFile(path.join(tmpTaskDir, caps.instructionFile), promptBody(definition));
+                }
             }
 
             // Build eval options — pass resolved content directly
@@ -248,6 +257,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
             const agentConfig: AgentConfig = {};
             if (agentName === 'claude-code') {
                 if (modelName) agentConfig.claude = { model: modelName };
+                if (asSubagent) agentConfig.claude = { ...agentConfig.claude, agent: resource.name };
             } else if (agentName === 'gemini-cli') {
                 if (modelName) agentConfig.gemini = { model: modelName };
             } else if (agentName === 'codex') {
@@ -264,7 +274,9 @@ export async function runEvals(dir: string, opts: RunOptions) {
                 };
             } else if (agentName === 'opencode') {
                 agentConfig.opencode = {};
-                if (opts.openCodeAgent) {
+                if (asSubagent) {
+                    agentConfig.opencode.agent = resource.name;  // the definition under test, not the built-in one
+                } else if (opts.openCodeAgent) {
                     agentConfig.opencode.agent = opts.openCodeAgent;
                 }
                 // --opencode-model predates --model and stays the more specific one
@@ -341,7 +353,7 @@ export async function runEvals(dir: string, opts: RunOptions) {
                         harness: agentName,
                         harnessVersion: harnessVersions.get(versionKey)!,
                         llm: agentConfig.opencode?.model ?? modelName,
-                        delivery: deliveryFor(resource.kind),
+                        delivery: deliveryFor(resource.kind, agentName, ignoredKeys.get(ignoredKey(resource, agentName))),
                         date: now,
                     }));
 
@@ -389,6 +401,48 @@ export async function runEvals(dir: string, opts: RunOptions) {
         head?.remove();
     }
 }
+
+/** The Harness a task runs on: CLI flag > task-level override > auto-detect from API key > default. */
+function pickHarness(opts: RunOptions, taskDef: EvalTaskConfig, resolved: ResolvedTask, env: Record<string, string>): string {
+    if (opts.harness) return harnessName(opts.harness);
+    if (taskDef.harness) return resolved.harness;
+    // No explicit override — auto-detect from available API keys
+    const found = [
+        env.ANTHROPIC_API_KEY && 'claude-code',
+        env.OPENAI_API_KEY && 'codex',
+        env.GEMINI_API_KEY && 'gemini-cli',
+    ].filter(Boolean) as string[];
+    return found.length === 1 ? found[0] : resolved.harness;
+}
+
+/**
+ * The compatibility gate: before any trial, each Agent Definition's keys are
+ * compared with what its Harness supports. Returns the unsupported keys per
+ * `resource|harness` (empty entries left out) and throws, naming them all,
+ * unless `--force` accepts the gap.
+ */
+async function compatibilityGate(targets: Target[], opts: RunOptions, env: Record<string, string>): Promise<Map<string, string[]>> {
+    const ignored = new Map<string, string[]>();
+    const stops: string[] = [];
+    for (const { resource, config, tasks } of targets) {
+        if (resource.kind !== 'agent') continue;
+        const keys = Object.keys(frontmatter(await fs.readFile(resource.dir, 'utf-8')));
+        for (const taskDef of tasks) {
+            const resolved = await resolveTask(taskDef, config.defaults, resource.evalDir);
+            const harness = pickHarness(opts, taskDef, resolved, env);
+            const id = ignoredKey(resource, harness);
+            if (ignored.has(id)) continue;
+            const unsupported = unsupportedKeys(harness, keys);
+            if (!unsupported.length) continue;
+            ignored.set(id, unsupported);
+            stops.push(`Running eval for ${resource.name} in harness ${harness} with ${unsupported.join(', ')} keys unsupported; run with --force to continue`);
+        }
+    }
+    if (stops.length && !opts.force) throw new Error(stops.join('\n'));
+    return ignored;
+}
+
+const ignoredKey = (resource: Resource, harness: string) => `${resource.name}|${harness}`;
 
 /** The Eval Project's resources with an eval, and the tasks of each that the selection picks. */
 async function loadSuite(dir: string, opts: RunOptions, log: boolean) {

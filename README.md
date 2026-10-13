@@ -101,6 +101,7 @@ Reports from before provenance existed still show: each file is a run of its own
 | `--output=DIR` | Output directory (default: `$TMPDIR/skillgrade`) |
 | `--validate` | Verify graders using reference solutions |
 | `--from-head` | Evaluate HEAD from a temporary worktree, leaving uncommitted changes to the inputs out (see [Browsing results](#browsing-results)) |
+| `--force` | Run an Agent Definition even though the harness ignores some of its keys; every Trial Record is `degraded` and lists them |
 | `--ci` | CI mode: exit non-zero if below threshold |
 | `--threshold=0.8` | Pass rate threshold for CI mode |
 | `--preview` | Show CLI results after running |

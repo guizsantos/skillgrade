@@ -4,6 +4,8 @@ import { shellQuote } from '../utils/shell';
 export interface ClaudeAgentConfig {
     /** Model alias or full id, passed straight to `claude --model`. */
     model?: string;
+    /** Run this named agent (`.claude/agents/<name>.md`) as the top-level agent. */
+    agent?: string;
 }
 
 export class ClaudeAgent extends BaseAgent {
@@ -26,7 +28,8 @@ export class ClaudeAgent extends BaseAgent {
         // Without --model, Claude Code answers with whatever the account default
         // is — which is invisible in the results and can change under you.
         const model = this.config.model ? ` --model ${shellQuote(this.config.model)}` : '';
-        const command = `claude -p --dangerously-skip-permissions${model} "$(cat /tmp/.prompt.md)"`;
+        const agent = this.config.agent ? ` --agent ${shellQuote(this.config.agent)}` : '';
+        const command = `claude -p --dangerously-skip-permissions${model}${agent} "$(cat /tmp/.prompt.md)"`;
         const result = await runCommand(command);
 
         if (result.exitCode !== 0) {
