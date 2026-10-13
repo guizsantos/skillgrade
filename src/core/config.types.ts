@@ -43,6 +43,8 @@ export interface AcpConfig {
 export interface EvalTaskConfig {
     name: string;
     instruction: string;    // inline text or path to .md file
+    /** Task references (`name`, `name@resource`, `name@kind:resource`) whose workspaces this task starts from. */
+    workspaceFrom?: string[];
     graders: EvalGraderConfig[];
     solution?: string;      // path to reference solution script
 
@@ -105,6 +107,8 @@ export interface ResolvedTask {
     instruction: string;    // actual content (not file path)
     /** The folder named after the task under the eval's `workspace/`, if there is one; copied into the agent's workspace. */
     workspaceDir?: string;
+    /** Workspace folders borrowed from other tasks (`workspace: [{task: ...}]`), copied in before `workspaceDir`. */
+    borrowedWorkspaceDirs?: string[];
     graders: ResolvedGrader[];
     solution?: string;      // resolved file path
     expected?: unknown;                     // reference output — graders only, never the workspace
