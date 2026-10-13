@@ -45,6 +45,7 @@ describe('running a Skill eval from an Eval Project', () => {
         expect(await fx.reports('greeter')).toEqual([]);
         expect(await fx.reports('farewell')).toHaveLength(1);
         await expect(fx.run({ eval: 'nope' })).rejects.toThrow(/not found/);
+        await expect(fx.run({ filterPattern: '(' })).rejects.toThrow(/Invalid --filter-pattern/);
     });
 
     it('treats a resource under search_paths.skills as a Skill, wherever that path points', async () => {
@@ -190,6 +191,15 @@ describe('running a Skill eval from an Eval Project', () => {
                 'evals/skills/greeter/eval.yaml': 'tasks: []\n',
             }));
             await expect(fx.run()).rejects.toThrow(/eval\.yaml is no longer supported.*eval\.yml/s);
+            expect(await fx.ran()).toBe(false);
+        });
+
+        it('is rejected even beside a project file, not silently ignored', async () => {
+            const fx = await evalProject(ctx => ({
+                ...greeterProject(fakeAgent({ record: ctx.record })),
+                'evals/eval.yaml': 'tasks: []\n',
+            }));
+            await expect(fx.run()).rejects.toThrow(/eval\.yaml is no longer supported/);
             expect(await fx.ran()).toBe(false);
         });
 

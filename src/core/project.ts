@@ -12,7 +12,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { EVAL_FILE } from './config';
+import { EVAL_FILE, LEGACY_EVAL_FILE } from './config';
 
 export const PROJECT_FILE = 'eval-project.yml';
 
@@ -46,10 +46,10 @@ export interface Resource {
 
 export async function loadProject(dir: string): Promise<Project> {
     const file = path.join(dir, PROJECT_FILE);
+    if (await fs.pathExists(path.join(dir, LEGACY_EVAL_FILE))) {
+        throw new Error(`${dir}: eval.yaml is no longer supported. Create an Eval Project instead: ${PROJECT_FILE} here, with one <kind>/<name>/${EVAL_FILE} per resource (see docs).`);
+    }
     if (!await fs.pathExists(file)) {
-        if (await fs.pathExists(path.join(dir, 'eval.yaml'))) {
-            throw new Error(`${dir}: eval.yaml is no longer supported. Create an Eval Project instead: ${PROJECT_FILE} here, with one <kind>/<name>/${EVAL_FILE} per resource (see docs).`);
-        }
         throw new Error(`No ${PROJECT_FILE} found in ${dir}. Run skillgrade from an Eval Project directory.`);
     }
 
@@ -103,7 +103,7 @@ export async function testedResources(project: Project): Promise<Resource[]> {
         for (const entry of entries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
             const evalDir = path.join(kindDir, entry.name);
             // eval.yaml counts: loading it explains that it is no longer supported
-            const hasEval = await fs.pathExists(path.join(evalDir, EVAL_FILE)) || await fs.pathExists(path.join(evalDir, 'eval.yaml'));
+            const hasEval = await fs.pathExists(path.join(evalDir, EVAL_FILE)) || await fs.pathExists(path.join(evalDir, LEGACY_EVAL_FILE));
             if (!hasEval) continue;
             const resource = found.find(r => r.kind === kind && r.name === entry.name);
             if (!resource) {

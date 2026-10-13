@@ -391,6 +391,8 @@ async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
         try {
             targets.push({ resource, config, tasks: selectTasks(config.tasks, selection) });
         } catch (err) {
+            // Only "no task by that name here" may pass: a bad filter or pattern is wrong everywhere
+            if (!(err instanceof Error && /^Eval ".*" not found$/.test(err.message))) throw err;
             errors.push(err);
             targets.push({ resource, config, tasks: [] });
         }
@@ -483,7 +485,7 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
     if (resolved.runtime !== 'docker') return;
 
     // Write Dockerfile
-    await fs.ensureDir(path.join(agentDir, 'environment'));
+    await fs.ensureDir(path.join(agentDir, '.skillgrade'));
     let dockerfileContent = `FROM ${resolved.docker.base}\n\nWORKDIR /workspace\n\n`;
 
     // Install the harness
@@ -514,6 +516,6 @@ export async function prepareTempTaskDir(resolved: ResolvedTask, baseDir: string
     }
 
     // The workspace files come in with the build context; the Dockerfile itself stays out of the workspace
-    dockerfileContent += `COPY . .\nRUN rm -rf environment\nCMD ["bash"]\n`;
-    await fs.writeFile(path.join(agentDir, 'environment', 'Dockerfile'), dockerfileContent);
+    dockerfileContent += `COPY . .\nRUN rm -rf .skillgrade\nCMD ["bash"]\n`;
+    await fs.writeFile(path.join(agentDir, '.skillgrade', 'Dockerfile'), dockerfileContent);
 }

@@ -29,7 +29,7 @@ export class DockerProvider implements EnvironmentProvider {
         const stream = await this.docker.buildImage({
             context: taskPath,
             src: ['.']
-        }, { t: baseName, dockerfile: 'environment/Dockerfile' });
+        }, { t: baseName, dockerfile: '.skillgrade/Dockerfile' });
 
         const buildResult = await new Promise<any[]>((resolve, reject) => {
             this.docker.modem.followProgress(stream, (err: Error | null, res: any[]) => err ? reject(err) : resolve(res));

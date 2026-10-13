@@ -36,13 +36,14 @@ const DEFAULT_CONFIG: EvalDefaults = {
 
 /** The file a resource's eval lives in, inside its directory of the Eval Project. */
 export const EVAL_FILE = 'eval.yml';
+export const LEGACY_EVAL_FILE = 'eval.yaml';
 
 /**
  * Load and parse a resource's eval.yml from its eval directory. The Eval
  * Project's `defaults` sit underneath the eval's own.
  */
 export async function loadEvalConfig(evalDir: string, projectDefaults: Record<string, any> = {}): Promise<EvalConfig> {
-    const legacy = path.join(evalDir, 'eval.yaml');
+    const legacy = path.join(evalDir, LEGACY_EVAL_FILE);
     if (await fs.pathExists(legacy)) {
         throw new Error(`${legacy}: eval.yaml is no longer supported. Rename it to ${EVAL_FILE}, move it to <eval project>/<kind>/<name>/, and drop the \`skill:\` and \`workspace:\` keys (see docs).`);
     }

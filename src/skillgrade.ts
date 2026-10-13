@@ -142,7 +142,7 @@ function printHelp() {
   Usage:
     skillgrade                     Run every eval in this Eval Project (eval-project.yml)
     skillgrade init [--force]      Generate eval.yaml (--force to overwrite)
-    skillgrade preview             View this skill's latest results in the terminal
+    skillgrade preview             View this project's latest results in the terminal
     skillgrade preview browser [--port=3847]
                                    Browse every skill's results under --output:
                                    scores, Δ vs the previous skill version, runs, trials

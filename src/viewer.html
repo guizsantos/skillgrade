@@ -420,7 +420,7 @@ function skillPage(s) {
   const Su = s.summary;
   const cur = Su && Su.versions.at(-1);
   let h = `<section class="head" style="margin-top:0"><div>${page("Skill", esc(s.name), "name", esc(s.description))}${cur ? balanceRow(cur) : ""}</div>`;
-  if (!s.has_eval) return h + `</section><section><p class="lede">No <code>eval.yaml</code> for this skill yet — author one with <code>skillgrade init</code>.</p></section>` + skillMd(s);
+  if (!s.has_eval) return h + `</section><section><p class="lede">No <code>eval.yml</code> for this skill yet — author one with <code>skillgrade init</code>.</p></section>` + skillMd(s);
   const tiers = [...new Set(s.tasks.map(t => t.metadata && t.metadata.tier).filter(Boolean))];
   h += `<div class="pills"><span class="pill">${s.tasks.length} tasks${tiers.length ? ` · tier ${esc(tiers.join(", "))}` : ""}</span>${Su && Su.model ? `<span class="pill mono">${esc(Su.model)}</span>` : ""}<span class="pill mono" title="${esc(s.eval_dir || "")}">skillgrade --smoke</span></div></section>`;
   if (!Su || !Su.runs.length) return h + `<section><p class="lede">No runs yet: <code>skillgrade --smoke</code></p></section>` + skillMd(s) + tasksSection(s);
@@ -438,7 +438,7 @@ function skillPage(s) {
   h += tasksSection(s);
   const hist = s.history || [], skillN = hist.filter(c => c.kind === "skill").length;
   h += `<div class="panel" style="margin-top:40px"><div class="head" style="align-items:flex-start"><div><h2>Score over time</h2>
-      <p class="note">Every commit that touched <span class="mono">${esc((s.skill_dirs || [])[0] || s.name)}</span>, oldest to newest, scored by the runs compared with the latest (same eval version and model). Minor ticks between them are commits that changed only the eval’s other inputs: eval.yaml, graders, fixtures, and the files its tasks copy in.</p></div>
+      <p class="note">Every commit that touched <span class="mono">${esc((s.skill_dirs || [])[0] || s.name)}</span>, oldest to newest, scored by the runs compared with the latest (same eval version and model). Minor ticks between them are commits that changed only the eval’s other inputs: eval.yml, graders, and the workspace folders of its tasks.</p></div>
       <div style="display:flex;gap:28px;text-align:right"><div><div style="font-size:32px;font-weight:300">${skillN}</div><div class="muted" style="font-size:12px">skill commits</div></div>
       <div><div style="font-size:32px;font-weight:300">${hist.length - skillN}</div><div class="muted" style="font-size:12px">workspace changes</div></div>
       <div><div style="font-size:32px;font-weight:300">${hist.filter(c => c.score).length}</div><div class="muted" style="font-size:12px">evaluated</div></div></div></div>
