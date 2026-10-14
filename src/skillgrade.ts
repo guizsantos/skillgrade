@@ -5,7 +5,7 @@
  *
  * Usage:
  *   skillgrade                     Run every eval in the Eval Project (eval-project.yml)
- *   skillgrade init                Generate eval.yaml from detected skills
+ *   skillgrade init                Scaffold an Eval Project (evals/) for the detected skills
  *   skillgrade preview [browser]   View results (CLI default, or every skill in the browser)
  *   skillgrade <task-name>         Run a specific eval
  *
@@ -142,7 +142,7 @@ function printHelp() {
 
   Usage:
     skillgrade                     Run every eval in this Eval Project (eval-project.yml)
-    skillgrade init [--force]      Generate eval.yaml (--force to overwrite)
+    skillgrade init [--force]      Scaffold an Eval Project in ./evals (--force to overwrite)
     skillgrade preview             View this project's latest results in the terminal
     skillgrade preview browser [--port=3847]
                                    Browse every skill's results under --output:
@@ -190,8 +190,8 @@ function printHelp() {
     --preview          Open CLI results after running
 
   Examples:
-    skillgrade init                # scaffold eval.yaml
-    skillgrade init --force        # overwrite existing eval.yaml
+    skillgrade init                # scaffold an Eval Project for the skills here
+    skillgrade init --force        # overwrite the generated files
     skillgrade                     # run all evals
     skillgrade --smoke             # quick 5-trial smoke test
     skillgrade --eval=fix-linting  # run a specific eval

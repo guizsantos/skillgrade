@@ -3,7 +3,7 @@
  *
  * Selecting a subset of a large suite: by name, by regex over names, or by the
  * `metadata` labels a task carries. Works the same whether the tasks are inline
- * in eval.yaml or imported from other files.
+ * in eval.yml or imported from other files.
  *
  *   skillgrade --filter tier=easy,medium         # OR within one key
  *   skillgrade --filter tier=hard --filter form=refuse   # AND across keys

@@ -1,6 +1,6 @@
 ---
 name: skillgrade-graders
-description: Authors deterministic and LLM rubric graders for skillgrade evaluations. Use when creating scoring scripts, writing evaluation rubrics, or combining multiple graders with weighted scoring. Don't use for setting up eval pipelines, configuring eval.yaml defaults, or general test writing.
+description: Authors deterministic and LLM rubric graders for skillgrade evaluations. Use when creating scoring scripts, writing evaluation rubrics, or combining multiple graders with weighted scoring. Don't use for setting up an Eval Project, configuring defaults or search paths, or general test writing.
 ---
 
 # Skillgrade Grader Authoring
@@ -12,7 +12,7 @@ description: Authors deterministic and LLM rubric graders for skillgrade evaluat
 2. For most tasks, combine both: deterministic graders verify outcomes (weight 0.7), LLM rubrics assess approach quality (weight 0.3).
 
 **Step 2: Write a Deterministic Grader**
-1. Create a script in the skill's `graders/` directory (bash or TypeScript).
+1. Create a script in the `graders/` directory of the resource's eval in the Eval Project (`<eval project>/<kind>/<name>/graders/`), never inside the resource itself: graders must stay out of the agent's reach. The agent's workspace is the script's working directory.
 2. The script must output a JSON object to stdout with the following structure:
    ```json
    {"score": 0.67, "details": "2/3 checks passed", "checks": [{"name": "check-name", "passed": true, "message": "Description"}]}
@@ -20,7 +20,7 @@ description: Authors deterministic and LLM rubric graders for skillgrade evaluat
 3. `score` (0.0–1.0) and `details` are required. `checks` is optional but recommended.
 4. Read `references/grader-output-schema.md` for the full output specification.
 5. Use `awk` for arithmetic in bash scripts — `bc` is not available in `node:20-slim`.
-6. Reference the grader in eval.yaml:
+6. Reference the grader in the eval's `eval.yml`:
    ```yaml
    - type: deterministic
      run: bash graders/check.sh
@@ -36,7 +36,7 @@ description: Authors deterministic and LLM rubric graders for skillgrade evaluat
    Efficiency (0-0.5):
    - Completed in ≤5 commands without trial-and-error?
    ```
-3. Reference the rubric in eval.yaml:
+3. Reference the rubric in the eval's `eval.yml`:
    ```yaml
    - type: llm_rubric
      rubric: |
@@ -45,7 +45,12 @@ description: Authors deterministic and LLM rubric graders for skillgrade evaluat
      llm_provider: gemini           # optional: gemini (default) | anthropic | openai | jev
      llm_model: gemini-3.5-flash    # optional model override (defaults to the latest dynamically resolved flash model)
    ```
-4. For long rubrics, store in a separate file and reference by path: `rubric: rubrics/quality.md`.
+4. For long or reusable rubrics, write a Judge: a plain-text file `llm_judges/<name>.md` in the eval's directory whose whole content is the rubric, and reference it by name instead of `type` and `rubric`:
+   ```yaml
+   - llm_judge: workflow-quality    # llm_judges/workflow-quality.md
+     weight: 0.3
+   ```
+   A grader takes either `llm_judge` or `rubric`, not both. A missing or empty judge file fails the run before any trial.
 
 **Step 4: Combine Multiple Graders**
 1. Assign weights to each grader based on importance. Weights are normalized automatically.
@@ -57,12 +62,12 @@ description: Authors deterministic and LLM rubric graders for skillgrade evaluat
        run: bash graders/check.sh
        weight: 0.7
      - type: llm_rubric
-       rubric: rubrics/quality.md
+       llm_judge: quality
        weight: 0.3
    ```
 
 **Step 5: Validate Graders**
-1. Create a reference solution script that produces the expected output.
+1. Create a reference solution script that produces the expected output, and point the task at it with `solution: solution/solve.sh` (relative to the eval's directory).
 2. Run `skillgrade --validate` to verify graders score the reference solution correctly.
 3. Test only deterministic graders: `skillgrade --grader=deterministic` (skips LLM calls, faster iteration).
 4. Test only LLM rubric graders: `skillgrade --grader=llm_rubric`.

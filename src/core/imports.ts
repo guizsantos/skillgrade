@@ -1,7 +1,7 @@
 /**
- * `$import` support for eval.yaml.
+ * `$import` support for eval.yml.
  *
- * Any section of an eval.yaml can live in another file:
+ * Any section of an eval.yml can live in another file:
  *
  *   defaults:
  *     $import: shared/defaults.yaml   # object position → merged, siblings win

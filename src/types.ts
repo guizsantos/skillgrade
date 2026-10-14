@@ -11,7 +11,7 @@ export interface GraderConfig {
     command?: string;                             // for deterministic: shell command to execute (e.g. 'bash tests/test.sh')
     rubric?: string;                              // for llm_rubric: file path to rubric (e.g. 'prompts/quality.md')
     model?: string;                               // for llm_rubric: LLM model override
-    provider?: LlmProvider; // for llm_rubric: which LLM API to call (eval.yaml's llm_provider; default: 'gemini')
+    provider?: LlmProvider; // for llm_rubric: which LLM API to call (eval.yml's llm_provider; default: 'gemini')
     weight: number;
     input?: GraderInput;                          // task context handed to the grader at grade time
 }
