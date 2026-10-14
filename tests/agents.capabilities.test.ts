@@ -43,8 +43,11 @@ describe('Harness capability table', () => {
             for (const row of Object.values(HARNESS_CAPABILITIES)) {
                 expect(Array.isArray(row.supportedKeys)).toBe(true);
             }
-            expect(capabilitiesOf('claude-code').supportedKeys).toEqual(['description', 'tools', 'disallowedTools', 'model', 'permissionMode', 'maxTurns', 'skills', 'mcpServers', 'hooks']);
-            expect(capabilitiesOf('opencode').supportedKeys).toEqual(['description', 'mode', 'model', 'temperature', 'top_p', 'steps', 'tools', 'permission']);
+            expect(capabilitiesOf('claude-code').supportedKeys).toEqual([
+                'description', 'tools', 'disallowedTools', 'model', 'permissionMode', 'maxTurns', 'skills', 'mcpServers', 'hooks',
+                'memory', 'background', 'effort', 'isolation', 'color', 'initialPrompt', 'experimental',
+            ]);
+            expect(capabilitiesOf('opencode').supportedKeys).toEqual(['description', 'mode', 'model', 'temperature', 'top_p', 'steps', 'tools', 'permission', 'maxSteps', 'disable', 'prompt', 'hidden', 'color']);
             for (const h of ['codex', 'gemini-cli', 'acp', 'command']) {
                 expect(capabilitiesOf(h).supportedKeys).toEqual(['description']);
             }
@@ -53,6 +56,8 @@ describe('Harness capability table', () => {
         it('reports the keys a Harness does not support, in the definition order', () => {
             expect(unsupportedKeys('claude-code', ['description', 'top_p', 'tools', 'temperature'])).toEqual(['top_p', 'temperature']);
             expect(unsupportedKeys('claude-code', ['description', 'tools'])).toEqual([]);
+            // Documented as ignored when the agent runs via `--agent`, so it is a degraded run.
+            expect(unsupportedKeys('claude-code', ['omitClaudeMd', 'effort'])).toEqual(['omitClaudeMd']);
         });
 
         it('never counts the name, which is identity and not a setting', () => {

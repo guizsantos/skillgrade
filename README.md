@@ -232,8 +232,8 @@ A **harness** is the coding-agent CLI under test (`claude-code`, `gemini-cli`, `
 
 | Harness | `agent_invocation` | Delivered as | Definition keys it acts on (besides `name`) |
 |---------|--------------------|--------------|---------------------------------------------|
-| `claude-code` | `subagent` | `.claude/agents/<name>.md`, run with `--agent <name>` | `description`, `tools`, `disallowedTools`, `model`, `permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks` |
-| `opencode` | `subagent` | `.opencode/agents/<name>.md`, run with `--agent <name>` | `description`, `mode`, `model`, `temperature`, `top_p`, `steps`, `tools`, `permission` |
+| `claude-code` | `subagent` | `.claude/agents/<name>.md`, run with `--agent <name>` | `description`, `tools`, `disallowedTools`, `model`, `permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks`, `memory`, `background`, `effort`, `isolation`, `color`, `initialPrompt`, `experimental` (not `omitClaudeMd`, which Claude Code ignores under `--agent`) |
+| `opencode` | `subagent` | `.opencode/agents/<name>.md`, run with `--agent <name>` | `description`, `mode`, `model`, `temperature`, `top_p`, `steps`, `tools`, `permission`, `maxSteps`, `disable`, `prompt`, `hidden`, `color` |
 | `codex` | `project_instruction` | the prompt alone, as `AGENTS.md` | `description` |
 | `gemini-cli` | `project_instruction` | the prompt alone, as `GEMINI.md` | `description` |
 | `acp`, `command` | `project_instruction` | the prompt alone, as `AGENTS.md` | `description` |
@@ -246,7 +246,7 @@ A **harness** is the coding-agent CLI under test (`claude-code`, `gemini-cli`, `
 Running eval for reviewer in harness codex with tools keys unsupported; run with --force to continue
 ```
 
-Pass **`--force`** to run anyway. Every Trial Record of that run is then `harness_compatibility: degraded` and lists the keys in `ignored_keys`, so a consumer can discount the score. A clean run is `full` and carries no `ignored_keys`. Skills, Project Instructions and Prompts are never gated. The capability table is one place in the code (`src/agents/capabilities.ts`): when a harness gains a real top-level agent flag, only its row changes.
+Pass **`--force`** to run anyway. Every Trial Record of that run is then `harness_compatibility: degraded` and lists the keys in `ignored_keys`, so a consumer can discount the score. A clean run is `full` and carries no `ignored_keys`. Skills, Project Instructions and Prompts are never gated. Codex (`.codex/agents/*.toml`) and Gemini CLI (`.gemini/agents/*.md`) have agent files of their own, but neither documents a flag to run one as the top-level agent, hence `project_instruction`. The capability table is one place in the code (`src/agents/capabilities.ts`): when a harness gains a real top-level agent flag, only its row changes.
 
 ## Results and Trial Records
 
