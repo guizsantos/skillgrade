@@ -1,0 +1,18 @@
+# A Skill's eval. Its workspace for the task below is workspace/write-commit-message/.
+tasks:
+  - name: write-commit-message
+    instruction: |
+      Look at the change in changes.diff and write its commit message.
+      Save it as COMMIT_MSG.txt.
+
+    graders:
+      - type: deterministic
+        run: |
+          first=$(head -n 1 COMMIT_MSG.txt 2>/dev/null)
+          if echo "$first" | grep -Eq '^(feat|fix|docs|refactor|test|chore)(\([a-z0-9-]+\))?: .+' && [ ${#first} -le 72 ]; then
+            echo '{"score":1,"details":"The first line is a Conventional Commits header"}'
+          else
+            echo '{"score":0,"details":"COMMIT_MSG.txt is missing, or its first line is not a header of at most 72 characters"}'
+          fi
+
+    solution: solution/solve.sh

@@ -1,4 +1,5 @@
 import { BaseAgent, CommandResult } from '../types';
+import { promptFilePath } from '../utils/shell';
 
 export interface CommandAgentConfig {
     /** The command to run (e.g. "node mycli.js"). The prompt is piped to its stdin. */
@@ -23,7 +24,7 @@ export class CommandAgent extends BaseAgent {
         super();
         if (!config || !config.command || !config.command.trim()) {
             throw new Error(
-                'Command agent requires a command. Specify via --command or command in eval.yaml'
+                'Command agent requires a command. Specify via --command or command in eval.yml'
             );
         }
         this.config = config;
@@ -37,20 +38,25 @@ export class CommandAgent extends BaseAgent {
         // Write the instruction to a file via base64 to avoid shell escaping
         // issues with long or special-character prompts, then pipe it to stdin.
         const b64 = Buffer.from(instruction).toString('base64');
-        await runCommand(`echo '${b64}' | base64 -d > /tmp/.prompt.md`);
+        const promptFile = promptFilePath();
+        await runCommand(`echo '${b64}' | base64 -d > ${promptFile}`);
 
-        const cwd = workspacePath.replace(/'/g, "'\\''");
-        const fullCommand = `cd '${cwd}' && cat /tmp/.prompt.md | ${this.config.command}`;
+        try {
+            const cwd = workspacePath.replace(/'/g, "'\\''");
+            const fullCommand = `cd '${cwd}' && cat ${promptFile} | ${this.config.command}`;
 
-        const env = this.config.env && Object.keys(this.config.env).length > 0
-            ? this.config.env
-            : undefined;
-        const result = await runCommand(fullCommand, env);
+            const env = this.config.env && Object.keys(this.config.env).length > 0
+                ? this.config.env
+                : undefined;
+            const result = await runCommand(fullCommand, env);
 
-        if (result.exitCode !== 0) {
-            console.error('CommandAgent: command exited with a non-zero status.');
+            if (result.exitCode !== 0) {
+                console.error('CommandAgent: command exited with a non-zero status.');
+            }
+
+            return result.stdout + '\n' + result.stderr;
+        } finally {
+            await runCommand(`rm -f ${promptFile}`);
         }
-
-        return result.stdout + '\n' + result.stderr;
     }
 }

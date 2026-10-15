@@ -29,7 +29,7 @@ export class DockerProvider implements EnvironmentProvider {
         const stream = await this.docker.buildImage({
             context: taskPath,
             src: ['.']
-        }, { t: baseName, dockerfile: 'environment/Dockerfile' });
+        }, { t: baseName, dockerfile: '.skillgrade/Dockerfile' });
 
         const buildResult = await new Promise<any[]>((resolve, reject) => {
             this.docker.modem.followProgress(stream, (err: Error | null, res: any[]) => err ? reject(err) : resolve(res));
@@ -109,6 +109,12 @@ export class DockerProvider implements EnvironmentProvider {
 
         await container.start();
         return container.id;
+    }
+
+    /** Put the grader files into the container's /workspace, after the agent is done. */
+    async injectGraders(containerId: string, graderDir: string): Promise<void> {
+        const archive = await this.createTarFromDir(graderDir, '');
+        await this.docker.getContainer(containerId).putArchive(archive, { path: '/workspace' });
     }
 
     /**

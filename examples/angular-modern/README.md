@@ -1,18 +1,25 @@
-# Angular Signals Example
+# Angular Modern APIs Example
 
-An advanced example showing how to evaluate a skill that requires static analysis grading.
+An advanced Eval Project for one Skill: static analysis grading and a reusable Judge.
 
 ## Structure
 
 ```
-angular-signals/
-├── SKILL.md                           # Angular modern APIs skill
-├── eval.yaml                          # Eval configuration
-├── fixtures/
-│   └── src/app/
-│       └── user-profile.component.ts  # Legacy component to modernize
-└── graders/
-    └── check-modern-apis.ts           # TypeScript static analysis grader
+angular-modern/
+├── skills/
+│   └── angular-modern-apis/
+│       └── SKILL.md                         # Angular modern APIs skill (the resource)
+└── evals/                                   # The Eval Project: run skillgrade from here
+    ├── eval-project.yml
+    └── skills/
+        └── angular-modern-apis/             # named after the skill it evaluates
+            ├── eval.yml
+            ├── graders/check-modern-apis.js # static analysis grader
+            ├── llm_judges/migration-quality.md  # reusable rubric
+            ├── solution/solve.sh            # reference solution for --validate
+            └── workspace/
+                └── modernize-component/     # named after the task
+                    └── src/app/user-profile.component.ts   # Legacy component to modernize
 ```
 
 ## What's tested
@@ -29,21 +36,30 @@ The agent must modernize an Angular component from legacy APIs to modern ones:
 
 ## Graders
 
-- **Deterministic (70%)** — TypeScript grader that reads the component source and uses regex-based static analysis to check 5 patterns. Each check contributes 0.2 to the score, enabling partial credit.
-- **LLM Rubric (30%)** — Evaluates correctness, completeness, and code quality.
-
-The deterministic grader uses the `setup` field to install TypeScript and ts-node during image build:
+- **Deterministic (70%)**: a Node.js grader that reads the component source and uses regex-based static analysis to check 5 patterns. Each check contributes 0.2 to the score, enabling partial credit.
+- **LLM Judge (30%)**: `llm_judge: migration-quality` names the file `llm_judges/migration-quality.md`, whose body is the rubric (correctness, completeness, code quality) and whose frontmatter sets `llm_provider` and `llm_model`. A Judge keeps the rubric and its LLM out of the YAML and can be reused by several tasks, each with its own `weight`.
 
 ```yaml
 graders:
   - type: deterministic
-    setup: npm install typescript ts-node @types/node
-    run: npx ts-node graders/check-modern-apis.ts
+    run: node graders/check-modern-apis.js
     weight: 0.7
+  - llm_judge: migration-quality
+    weight: 0.3
 ```
+
+A grader that needs dependencies can install them during the image build with `setup:`, for example
+`setup: npm install typescript ts-node @types/node` for a TypeScript grader run by `npx ts-node`.
 
 ## Run
 
 ```bash
+cd evals
 GEMINI_API_KEY=your-key skillgrade --smoke
+```
+
+Check the deterministic grader against the reference solution, with no agent and no LLM:
+
+```bash
+skillgrade --validate --grader=deterministic --runtime=local
 ```

@@ -1,0 +1,3 @@
+feat: add CSV export to reports
+fix: crash when the report is empty
+chore: bump dependencies

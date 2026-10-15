@@ -51,8 +51,8 @@ export function gitProvenance(evalDir: string, skillDirs: string[], evalFiles: s
         run_id: `${stamp}-${commit ? commit.slice(0, 7) : 'nogit'}`,
         commit,
         skill_commit: skillDirs.length ? last(...skillDirs) : null,
-        // the eval is its dir plus the files eval.yaml imports; the skill can sit inside the
-        // eval dir (SKILL.md beside eval.yaml), and is not part of the eval
+        // the eval is its dir plus the files eval.yml imports; the skill can sit inside the
+        // eval dir (an older layout), and is not part of the eval
         eval_commit: commit ? last(dir, ...evalFiles, ...exclude) : null,
         args: process.argv.slice(2),
         eval_dir: dir,

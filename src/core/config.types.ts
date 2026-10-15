@@ -1,16 +1,9 @@
 /**
- * eval.yaml configuration types.
+ * eval.yml configuration types.
  *
- * These types define the schema for the eval.yaml file that developers
- * create to define evaluation tasks for their skills.
+ * These types define the schema for a resource's `eval.yml` (inside an Eval
+ * Project) that developers write to define evaluation tasks.
  */
-
-/** Workspace file mapping: copy a local file into the container */
-export interface WorkspaceMapping {
-    src: string;        // relative to eval.yaml
-    dest: string;       // path in container (relative = in /workspace, absolute = absolute)
-    chmod?: string;     // e.g. "+x"
-}
 
 /** Grader definition */
 export interface EvalGraderConfig {
@@ -18,6 +11,7 @@ export interface EvalGraderConfig {
     setup?: string;                               // commands to install grader dependencies (runs during image build)
     run?: string;                                 // inline script or file path (deterministic)
     rubric?: string;                              // inline rubric or file path (llm_rubric)
+    llm_judge?: string;                           // name of a reusable Judge in the eval's llm_judges/ (instead of a rubric)
     llm_model?: string;                           // llm_rubric: model override, e.g. 'claude-sonnet-5' or 'gemini-3-flash-preview'
     llm_provider?: LlmProvider;                   // llm_rubric: which LLM API scores it (default: 'gemini')
     weight: number;
@@ -49,10 +43,14 @@ export interface AcpConfig {
 /** Single eval task */
 export interface EvalTaskConfig {
     name: string;
-    instruction: string;    // inline text or path to .md file
-    workspace?: WorkspaceMapping[];
+    instruction?: string;   // inline text or path to .md file; optional only for a Prompt eval
+    /** Task references (`name`, `name@resource`, `name@kind:resource`) whose workspaces this task starts from. */
+    workspaceFrom?: string[];
     graders: EvalGraderConfig[];
     solution?: string;      // path to reference solution script
+
+    /** Values for the `{{placeholders}}` of a Prompt, over the project-wide ones. */
+    variables?: Record<string, unknown>;
 
     /**
      * Reference output for this task — the row's answer key. Reaches graders
@@ -100,10 +98,9 @@ export interface EvalDefaults {
     environment: EnvironmentConfig;
 }
 
-/** Top-level eval.yaml */
+/** A resource's eval.yml, with the Eval Project's defaults underneath its own */
 export interface EvalConfig {
     version: string;
-    skill?: string;         // optional path to SKILL.md (defaults to auto-detection)
     defaults: EvalDefaults;
     tasks: EvalTaskConfig[];
 }
@@ -111,8 +108,14 @@ export interface EvalConfig {
 /** Resolved task — all defaults applied, file references resolved to content */
 export interface ResolvedTask {
     name: string;
-    instruction: string;    // actual content (not file path)
-    workspace: WorkspaceMapping[];
+    instruction: string;    // actual content (not file path); empty when a Prompt eval's task has none
+    /** The folder named after the task under the eval's `workspace/`, if there is one; copied into the agent's workspace. */
+    workspaceDir?: string;
+    /**
+     * Workspace folders borrowed from other tasks (`workspace: [{task: ...}]`), resolved recursively and
+     * flattened depth-first (each folder once, at its first place), copied in order before `workspaceDir`.
+     */
+    borrowedWorkspaceDirs?: string[];
     graders: ResolvedGrader[];
     solution?: string;      // resolved file path
     expected?: unknown;                     // reference output — graders only, never the workspace

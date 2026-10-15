@@ -13,36 +13,44 @@ import { EvalTaskConfig, EvalDefaults } from '../src/core/config.types';
 const mockPathExists = vi.mocked(fs.pathExists);
 const mockReadFile = vi.mocked(fs.readFile);
 
+/** Every file exists, except the legacy eval.yaml that loadEvalConfig rejects. */
+const everythingButLegacy = async (p: string) => !p.endsWith('eval.yaml');
+
 beforeEach(() => {
   vi.resetAllMocks();
 });
 
 describe('loadEvalConfig', () => {
-  it('throws when eval.yaml is missing', async () => {
+  it('throws when eval.yml is missing', async () => {
     mockPathExists.mockResolvedValue(false as any);
-    await expect(loadEvalConfig('/test')).rejects.toThrow('No eval.yaml found');
+    await expect(loadEvalConfig('/test')).rejects.toThrow('No eval.yml found');
+  });
+
+  it('rejects a legacy eval.yaml with a clear message', async () => {
+    mockPathExists.mockResolvedValue(true as any);
+    await expect(loadEvalConfig('/test')).rejects.toThrow('eval.yaml is no longer supported');
   });
 
   it('throws when YAML is not an object', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     mockReadFile.mockResolvedValue('just a string' as any);
     await expect(loadEvalConfig('/test')).rejects.toThrow('must be a YAML object');
   });
 
   it('throws when tasks array is missing', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     mockReadFile.mockResolvedValue('version: "1"\n' as any);
     await expect(loadEvalConfig('/test')).rejects.toThrow('at least one task');
   });
 
   it('throws when tasks array is empty', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     mockReadFile.mockResolvedValue('version: "1"\ntasks: []\n' as any);
     await expect(loadEvalConfig('/test')).rejects.toThrow('at least one task');
   });
 
   it('throws when task is missing name', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - instruction: "do something"
@@ -55,7 +63,7 @@ tasks:
   });
 
   it('throws when task is missing instruction', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
@@ -68,7 +76,7 @@ tasks:
   });
 
   it('throws when task has no graders', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
@@ -78,26 +86,59 @@ tasks:
     await expect(loadEvalConfig('/test')).rejects.toThrow('at least one grader');
   });
 
-  it('throws on workspace mapping without src/dest', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+  it('throws on a workspace: key: the workspace is the folder named after the task', async () => {
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
     instruction: "do something"
     workspace:
-      - { foo: bar }
+      - fixtures/app.js
     graders:
       - type: deterministic
         run: "echo ok"
 `;
     mockReadFile.mockResolvedValue(yaml as any);
-    await expect(loadEvalConfig('/test')).rejects.toThrow('without src/dest');
+    await expect(loadEvalConfig('/test')).rejects.toThrow('workspace/test-task/');
+  });
+
+  it('throws on a skill: key: the resource is the directory the eval sits in', async () => {
+    mockPathExists.mockImplementation(everythingButLegacy as any);
+    mockReadFile.mockResolvedValue('skill: ./SKILL.md\ntasks: []\n' as any);
+    await expect(loadEvalConfig('/test')).rejects.toThrow('"skill:" key');
+  });
+
+  it.each(['a/b', '..', 'a\\b'])('throws on the task name %s: it names a workspace folder', async (name) => {
+    mockPathExists.mockImplementation(everythingButLegacy as any);
+    const yaml = `version: "1"
+tasks:
+  - name: ${JSON.stringify(name)}
+    instruction: "do something"
+    graders:
+      - type: deterministic
+        run: "echo ok"
+`;
+    mockReadFile.mockResolvedValue(yaml as any);
+    await expect(loadEvalConfig('/test')).rejects.toThrow('must be a plain name');
+  });
+
+  it('lets the eval project defaults sit under the eval\'s own', async () => {
+    mockPathExists.mockImplementation(everythingButLegacy as any);
+    mockReadFile.mockResolvedValue(`defaults:
+  trials: 2
+  docker: { setup: "apt-get update" }
+tasks:
+  - name: t
+    instruction: i
+    graders: [{ type: deterministic, run: "echo ok" }]
+` as any);
+    const { defaults } = await loadEvalConfig('/test', { trials: 9, timeout: 77, docker: { base: 'alpine' } });
+    expect(defaults).toMatchObject({ trials: 2, timeout: 77, docker: { base: 'alpine', setup: 'apt-get update' } });
   });
 
   it('parses valid config correctly', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
-skill: ./SKILL.md
 defaults:
   harness: claude-code
   trials: 10
@@ -118,7 +159,6 @@ tasks:
 
     const config = await loadEvalConfig('/test');
     expect(config.version).toBe('1');
-    expect(config.skill).toBe('./SKILL.md');
     expect(config.defaults.harness).toBe('claude-code');
     expect(config.defaults.trials).toBe(10);
     expect(config.defaults.docker.base).toBe('ubuntu:22.04');
@@ -130,7 +170,7 @@ tasks:
   });
 
   it('applies default values when defaults not specified', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
@@ -150,50 +190,8 @@ tasks:
     expect(config.defaults.docker.base).toBe('node:20-slim');
   });
 
-  it('handles workspace string shorthand', async () => {
-    mockPathExists.mockResolvedValue(true as any);
-    const yaml = `version: "1"
-tasks:
-  - name: test-task
-    instruction: do it
-    workspace:
-      - fixtures/app.js
-    graders:
-      - type: deterministic
-        run: "echo ok"
-`;
-    mockReadFile.mockResolvedValue(yaml as any);
-
-    const config = await loadEvalConfig('/test');
-    expect(config.tasks[0].workspace).toEqual([
-      { src: 'fixtures/app.js', dest: 'app.js' },
-    ]);
-  });
-
-  it('handles workspace objects with chmod', async () => {
-    mockPathExists.mockResolvedValue(true as any);
-    const yaml = `version: "1"
-tasks:
-  - name: test-task
-    instruction: do it
-    workspace:
-      - src: scripts/run.sh
-        dest: /workspace/run.sh
-        chmod: "+x"
-    graders:
-      - type: deterministic
-        run: "echo ok"
-`;
-    mockReadFile.mockResolvedValue(yaml as any);
-
-    const config = await loadEvalConfig('/test');
-    expect(config.tasks[0].workspace).toEqual([
-      { src: 'scripts/run.sh', dest: '/workspace/run.sh', chmod: '+x' },
-    ]);
-  });
-
   it('defaults grader weight to 1.0', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
@@ -209,7 +207,7 @@ tasks:
   });
 
   it('parses llm_provider from defaults', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 defaults:
   llm_provider: anthropic
@@ -227,7 +225,7 @@ tasks:
   });
 
   it('rejects invalid llm_provider value', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 defaults:
   llm_provider: invalid_provider
@@ -244,7 +242,7 @@ tasks:
   });
 
   it('loads the keys and harness names from before the rename, with a warning', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 defaults:
   agent: claude
@@ -274,7 +272,7 @@ tasks:
   });
 
   it('rejects the command harness when no command is set', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 defaults:
   harness: command
@@ -291,7 +289,7 @@ tasks:
   });
 
   it('accepts the command harness with a command in defaults', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 defaults:
   harness: command
@@ -311,7 +309,7 @@ tasks:
   });
 
   it('rejects invalid llm_provider on individual grader', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
@@ -327,7 +325,7 @@ tasks:
   });
 
   it('rejects invalid llm_provider at task level', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
@@ -343,7 +341,7 @@ tasks:
   });
 
   it('preserves task-level llm_provider through loadEvalConfig', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 defaults:
   llm_provider: gemini
@@ -362,7 +360,7 @@ tasks:
   });
 
   it('preserves task-level llm_model through loadEvalConfig', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 defaults:
   llm_model: gemini-1.5-flash
@@ -381,7 +379,7 @@ tasks:
   });
 
   it('preserves task-level environment through loadEvalConfig', async () => {
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     const yaml = `version: "1"
 tasks:
   - name: test-task
@@ -537,7 +535,7 @@ describe('resolveTask', () => {
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 1.0 }],
     };
 
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     mockReadFile.mockResolvedValue('File content here' as any);
 
     const resolved = await resolveTask(task, defaults, '/base');
@@ -562,7 +560,7 @@ describe('resolveTask', () => {
       graders: [{ type: 'deterministic', run: 'test.sh', weight: 1.0 }],
     };
 
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     mockReadFile.mockResolvedValue('#!/bin/bash\necho pass' as any);
 
     const resolved = await resolveTask(task, defaults, '/base');
@@ -576,7 +574,7 @@ describe('resolveTask', () => {
       graders: [{ type: 'llm_rubric', rubric: 'rubric.md', weight: 1.0 }],
     };
 
-    mockPathExists.mockResolvedValue(true as any);
+    mockPathExists.mockImplementation(everythingButLegacy as any);
     mockReadFile.mockResolvedValue('Evaluate quality...' as any);
 
     const resolved = await resolveTask(task, defaults, '/base');
@@ -595,15 +593,18 @@ describe('resolveTask', () => {
     expect(resolved.solution).toContain('solutions/solve.sh');
   });
 
-  it('sets empty workspace when not provided', async () => {
+  it('finds the workspace folder named after the task, and none when there is no folder', async () => {
     const task: EvalTaskConfig = {
       name: 'test-task',
       instruction: 'multi\nline',
       graders: [{ type: 'deterministic', run: 'echo ok', weight: 1.0 }],
     };
 
-    const resolved = await resolveTask(task, defaults, '/base');
-    expect(resolved.workspace).toEqual([]);
+    mockPathExists.mockImplementation((async (p: string) => p.endsWith('/base/workspace/test-task')) as any);
+    expect((await resolveTask(task, defaults, '/base')).workspaceDir).toBe('/base/workspace/test-task');
+
+    mockPathExists.mockResolvedValue(false as any);
+    expect((await resolveTask(task, defaults, '/base')).workspaceDir).toBeUndefined();
   });
 
   it('preserves grader setup field', async () => {

@@ -4,8 +4,8 @@
  * skillgrade CLI
  *
  * Usage:
- *   skillgrade                     Run all eval tasks from eval.yaml
- *   skillgrade init                Generate eval.yaml from detected skills
+ *   skillgrade                     Run every eval in the Eval Project (eval-project.yml)
+ *   skillgrade init                Scaffold an Eval Project (evals/) for the detected skills
  *   skillgrade preview [browser]   View results (CLI default, or every skill in the browser)
  *   skillgrade <task-name>         Run a specific eval
  *
@@ -128,6 +128,7 @@ async function main() {
         openCodeAgent: getFlag('opencode-agent'),
         openCodeModel: getFlag('opencode-model'),
         fromHead: hasFlag('from-head'),
+        force: hasFlag('force'),
     });
 
     if (openPreview) {
@@ -140,9 +141,9 @@ function printHelp() {
   skillgrade - The easiest way to evaluate your Agent Skills
 
   Usage:
-    skillgrade                     Run all evals from eval.yaml
-    skillgrade init [--force]      Generate eval.yaml (--force to overwrite)
-    skillgrade preview             View this skill's latest results in the terminal
+    skillgrade                     Run every eval in this Eval Project (eval-project.yml)
+    skillgrade init [--force]      Scaffold an Eval Project in ./evals (--force to overwrite)
+    skillgrade preview             View this project's latest results in the terminal
     skillgrade preview browser [--port=3847]
                                    Browse every skill's results under --output:
                                    scores, Δ vs the previous skill version, runs, trials
@@ -182,13 +183,15 @@ function printHelp() {
                        inputs (skill, eval dir, imported YAML, workspace files)
                        stop it. This evaluates HEAD from a temporary git
                        worktree instead, leaving them out (not with --validate)
+    --force            Run an Agent Definition even though the harness ignores some of
+                       its keys; results are recorded as degraded, with those keys
     --ci               CI mode: exit non-zero if below threshold
     --threshold=0.8    Pass rate threshold for CI mode
     --preview          Open CLI results after running
 
   Examples:
-    skillgrade init                # scaffold eval.yaml
-    skillgrade init --force        # overwrite existing eval.yaml
+    skillgrade init                # scaffold an Eval Project for the skills here
+    skillgrade init --force        # overwrite the generated files
     skillgrade                     # run all evals
     skillgrade --smoke             # quick 5-trial smoke test
     skillgrade --eval=fix-linting  # run a specific eval

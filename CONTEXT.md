@@ -19,7 +19,7 @@ _Avoid_: AGENT.md, AGENTS.md (those name files, not the concept)
 A file always loaded into an agent's context for a project, such as `AGENTS.md`, `CLAUDE.md` or `GEMINI.md`.
 
 **Prompt**:
-A reusable prompt template held by a platform, with variables. A task supplies the variable values, the expected results and the graders.
+A reusable prompt template held by a platform, with variables. A task supplies the variable values (`variables:`, over the project-wide ones in the Project File), the expected results and the graders. The rendered Prompt is what the agent is asked; a Prompt task's own `instruction` is optional and follows it.
 
 **Harness**:
 The coding-agent CLI or runtime that runs a trial (Claude Code, Codex, Gemini CLI, opencode, ...). Scores are never comparable across Harnesses, just as they are not across LLMs.
@@ -48,13 +48,13 @@ The `eval.yml` in a resource's directory of the Eval Project, holding its tasks.
 One scenario in an Eval, with expected results, graders and a solution. Its workspace is the folder named after it under the Eval's `workspace/`, so the name is never repeated in YAML. No folder means an empty workspace. A task can reuse another's workspace with `workspace: [{task: name[@resource]}]`. `expected` and `solution` stay in YAML and only graders see them.
 
 **Judge**:
-A reusable LLM-grader definition under `llm_judges/`, referenced from a grader by name (`llm_judge: judge-name`).
+A reusable LLM-grader definition: a file `llm_judges/<name>.md` of an Eval, referenced from a grader by its file name (`llm_judge: name`). Its optional YAML frontmatter carries `llm_provider` and `llm_model`; the body after it is the rubric. The `weight` is not part of a Judge: it stays on each grader item, so tasks can weigh the same Judge differently. A judge grader's LLM is layered per field, most specific wins: project defaults, then the eval's `defaults`, then the Judge's frontmatter; a task-level `llm_provider`/`llm_model` fills a field the Judge leaves unset. No implicit provider applies to a Judge: a field still unset fails before any trial. Setting `llm_provider`/`llm_model` on the grader item, or on a task for a field its Judge also sets, is an error, so nothing is silently overridden.
 
 **Resource Name**:
-The directory name of a Static Resource. Its frontmatter `name:` is required and must equal it; a missing or different name fails loudly. Names are unique within a kind, not across kinds. Project Instructions are exempt: they carry no frontmatter, and their name is the directory name only.
+The directory name of a Static Resource (for a Prompt, its file name without `.md`). Its frontmatter `name:` is required and must equal it; a missing or different name fails loudly. Names are unique within a kind, not across kinds. Project Instructions are exempt: they carry no frontmatter, and their name is the directory name only.
 
 **Task Reference**:
-`task: name` resolves only within the same Eval, and an unknown name errors with a project-wide "did you mean `name@skills:other`?" hint. `task: name@resource` resolves across the whole project when `resource` is unique, and errors when it is ambiguous across kinds. The full form is `task: name@kind:resource`.
+`task: name` resolves only within the same Eval, and an unknown name errors with a project-wide "did you mean `name@skills:other`?" hint. `task: name@resource` resolves across the whole project when `resource` is unique, and errors when it is ambiguous across kinds. The full form is `task: name@kind:resource`. Borrowing is recursive (a referenced task brings what it borrows, each reference resolved from the Eval that declares it); a cycle fails loudly before any trial.
 
 **Gateway Resource**:
 The record in the LiteLLM gateway that corresponds to a Static Resource, and that Trial Records are published to. Matched by name; zero or multiple matches fail loudly.

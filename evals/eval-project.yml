@@ -1,0 +1,20 @@
+# Skillgrade Self-Evaluation
+#
+# Dogfooding: the Eval Project that evaluates this repository's own skills
+# (skillgrade-setup and skillgrade-graders). Run it from this directory:
+#
+#   GEMINI_API_KEY=your-key JEV_API_KEY=your-key skillgrade --smoke
+
+defaults:
+  harness: gemini-cli
+  runtime: docker
+  trials: 5
+  timeout: 600
+  threshold: 0.7
+  docker:
+    base: node:20-slim
+    setup: |
+      npm i -g js-yaml 2>/dev/null
+
+search_paths:
+  skills: ["../skills"]

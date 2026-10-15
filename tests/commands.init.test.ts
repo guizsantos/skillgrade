@@ -1,35 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { generateWithLLM } from '../src/commands/init';
-
-// We test extractInstructionHint and getInlineTemplate
-// These functions are not exported so we need to test them via runInit or replicate them
+import * as fs from 'fs-extra';
+import * as os from 'os';
+import * as path from 'path';
+import { extractInstructionHint, generateWithLLM, getInlineProjectTemplate, getInlineTemplate, runInit } from '../src/commands/init';
+import { loadProject, testedResources } from '../src/core/project';
+import { loadEvalConfig } from '../src/core/config';
 
 describe('extractInstructionHint', () => {
-  // Replicate the function since it's not exported
-  function extractInstructionHint(skillMd: string): string {
-    const lines = skillMd.split('\n');
-    let foundHeading = false;
-    const paragraphLines: string[] = [];
-
-    for (const line of lines) {
-      if (line.startsWith('# ') && !foundHeading) {
-        foundHeading = true;
-        continue;
-      }
-      if (foundHeading) {
-        if (line.trim() === '' && paragraphLines.length > 0) break;
-        if (line.startsWith('#')) break;
-        if (line.trim()) paragraphLines.push(line.trim());
-      }
-    }
-
-    if (paragraphLines.length > 0) {
-      return `TODO: Write an instruction based on this skill.\n      Skill description: ${paragraphLines.join(' ')}`;
-    }
-
-    return 'TODO: Write an instruction for the agent.';
-  }
-
   it('extracts first paragraph after heading', () => {
     const content = `# My Skill
 
@@ -77,65 +54,123 @@ Short description.`;
   });
 });
 
-describe('getInlineTemplate', () => {
-  // Replicate the function since it's not exported
-  function getInlineTemplate(): string {
-    return `version: "1"
-
-defaults:
-  harness: gemini-cli
-  runtime: docker
-  trials: 5
-  timeout: 300
-  threshold: 0.8
-  docker:
-    base: node:20-slim
-
-tasks:
-  - name: {{TASK_NAME}}
-    instruction: |
-      {{INSTRUCTION}}
-
-    graders:
-      - type: deterministic
-        run: |
-          # Grader must output JSON: {"score": 0.0-1.0, "details": "...", "checks": [...]}
-          echo '{"score": 0.0, "details": "TODO: implement grader"}'
-        weight: 0.7
-
-      - type: llm_rubric
-        rubric: |
-          TODO: Write evaluation criteria.
-        weight: 0.3
-`;
-  }
-
-  it('returns valid YAML template', () => {
+describe('inline templates', () => {
+  it('the eval template holds tasks only: no version, skill or workspace keys', () => {
     const template = getInlineTemplate();
-    expect(template).toContain('version: "1"');
     expect(template).toContain('{{TASK_NAME}}');
     expect(template).toContain('{{INSTRUCTION}}');
+    expect(template).toMatch(/^tasks:/m);
+    expect(template).not.toMatch(/^(version|skill|workspace|defaults):/m);
   });
 
-  it('includes default configuration', () => {
+  it('the eval template has both grader types and a placeholder grader that outputs JSON', () => {
     const template = getInlineTemplate();
+    expect(template).toContain('type: deterministic');
+    expect(template).toContain('type: llm_rubric');
+    expect(template).toContain('"score"');
+    expect(template).toContain('"details"');
+  });
+
+  it('the project template carries the defaults and the skills search path', () => {
+    const template = getInlineProjectTemplate();
     expect(template).toContain('harness: gemini-cli');
     expect(template).toContain('runtime: docker');
     expect(template).toContain('trials: 5');
     expect(template).toContain('timeout: 300');
     expect(template).toContain('threshold: 0.8');
+    expect(template).toContain('{{SKILLS_PATHS}}');
+  });
+});
+
+describe('runInit', () => {
+  const savedEnv = { ...process.env };
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'sg-init-')));
+    // No key: init writes the template instead of calling an LLM
+    for (const key of ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']) delete process.env[key];
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  it('includes both grader types', () => {
-    const template = getInlineTemplate();
-    expect(template).toContain('type: deterministic');
-    expect(template).toContain('type: llm_rubric');
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    process.env = { ...savedEnv };
+    await fs.remove(dir);
   });
 
-  it('has placeholder grader that outputs JSON', () => {
-    const template = getInlineTemplate();
-    expect(template).toContain('"score"');
-    expect(template).toContain('"details"');
+  const skillMd = (name: string) => `---\nname: ${name}\ndescription: ${name} skill\n---\n\n# ${name}\n\nDoes ${name} things.\n`;
+
+  /** Everything an Eval Project's `skillgrade` run would load, through the same loaders. */
+  async function loadScaffold() {
+    const projectDir = path.join(dir, 'evals');
+    const project = await loadProject(projectDir);
+    const resources = await testedResources(project);
+    const configs = await Promise.all(resources.map(r => loadEvalConfig(r.evalDir, project.defaults)));
+    return { projectDir, project, resources, configs };
+  }
+
+  it('scaffolds an Eval Project for the skills it finds, which the loaders accept', async () => {
+    await fs.outputFile(path.join(dir, 'skills/alpha/SKILL.md'), skillMd('alpha'));
+    await fs.outputFile(path.join(dir, 'skills/beta/SKILL.md'), skillMd('beta'));
+    await runInit(dir);
+
+    const { project, resources, configs } = await loadScaffold();
+    expect(project.searchPaths.skills).toEqual([path.join(dir, 'skills')]);
+    expect(resources.map(r => [r.kind, r.name])).toEqual([['skill', 'alpha'], ['skill', 'beta']]);
+    expect(configs.map(c => c.tasks[0].name)).toEqual(['test-alpha', 'test-beta']);
+    expect(configs[0].tasks[0].instruction).toContain('Does alpha things.');
+  });
+
+  it('does not write the removed single-file eval.yaml, anywhere', async () => {
+    await fs.outputFile(path.join(dir, 'skills/alpha/SKILL.md'), skillMd('alpha'));
+    await runInit(dir);
+    const files: string[] = [];
+    for (const entry of await fs.readdir(dir, { recursive: true })) files.push(String(entry));
+    expect(files.filter(f => f.endsWith('eval.yaml'))).toEqual([]);
+    expect(await fs.pathExists(path.join(dir, 'evals/eval-project.yml'))).toBe(true);
+  });
+
+  it('points the search path at wherever the skills are, relative to the project', async () => {
+    await fs.outputFile(path.join(dir, '.agents/skills/alpha/SKILL.md'), skillMd('alpha'));
+    await runInit(dir);
+    expect((await fs.readFile(path.join(dir, 'evals/eval-project.yml'), 'utf-8'))).toContain('skills: ["../.agents/skills"]');
+    expect((await loadScaffold()).resources.map(r => r.name)).toEqual(['alpha']);
+  });
+
+  it('names an eval after the skill directory, not its frontmatter', async () => {
+    await fs.outputFile(path.join(dir, 'skills/alpha/SKILL.md'), skillMd('alpha'));
+    await runInit(dir);
+    expect(await fs.pathExists(path.join(dir, 'evals/skills/alpha/eval.yml'))).toBe(true);
+  });
+
+  it('with no skill, writes a project around a placeholder skill so that it still loads', async () => {
+    await runInit(dir);
+    const { resources } = await loadScaffold();
+    expect(resources.map(r => r.name)).toEqual(['my-skill']);
+    expect(await fs.pathExists(path.join(dir, 'skills/my-skill/SKILL.md'))).toBe(true);
+  });
+
+  it('refuses to scaffold inside a skill, which an Eval Project must stay apart from', async () => {
+    await fs.outputFile(path.join(dir, 'SKILL.md'), skillMd('alpha'));
+    await expect(runInit(dir)).rejects.toThrow(/inside a skill/);
+    expect(await fs.pathExists(path.join(dir, 'evals'))).toBe(false);
+  });
+
+  it('refuses to overwrite an existing project without --force, and overwrites the generated files with it', async () => {
+    await fs.outputFile(path.join(dir, 'skills/alpha/SKILL.md'), skillMd('alpha'));
+    await runInit(dir);
+    const evalFile = path.join(dir, 'evals/skills/alpha/eval.yml');
+    await fs.writeFile(evalFile, 'edited');
+    await fs.outputFile(path.join(dir, 'evals/skills/alpha/graders/keep.sh'), 'keep');
+
+    await expect(runInit(dir)).rejects.toThrow(/already exists/);
+    expect(await fs.readFile(evalFile, 'utf-8')).toBe('edited');
+
+    await runInit(dir, { force: true });
+    expect(await fs.readFile(evalFile, 'utf-8')).toContain('tasks:');
+    expect(await fs.pathExists(path.join(dir, 'evals/skills/alpha/graders/keep.sh'))).toBe(true);
   });
 });
 

@@ -27,6 +27,10 @@ export class LocalProvider implements EnvironmentProvider {
         return tempDir;
     }
 
+    async injectGraders(workspacePath: string, graderDir: string): Promise<void> {
+        await fs.copy(graderDir, workspacePath);
+    }
+
     async cleanup(workspacePath: string): Promise<void> {
         if (await fs.pathExists(workspacePath)) {
             await fs.remove(workspacePath);

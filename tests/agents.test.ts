@@ -5,6 +5,9 @@ import { OpenCodeAgent } from '../src/agents/opencode';
 import { CommandAgent } from '../src/agents/command';
 import { CodexAgent } from '../src/agents/codex';
 import { CommandResult } from '../src/types';
+import { exec } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
 
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -21,9 +24,9 @@ describe('GeminiAgent', () => {
 
     const result = await agent.run('Test instruction', '/workspace', mockRunCommand);
 
-    expect(commands).toHaveLength(2);
+    expect(commands).toHaveLength(3);
     expect(commands[0]).toContain('base64');
-    expect(commands[0]).toContain('/tmp/.prompt.md');
+    expect(commands[0]).toContain('/tmp/.prompt-');
     expect(commands[1]).toContain('gemini');
     expect(commands[1]).toContain('-y');
     expect(commands[1]).toContain('--sandbox=none');
@@ -107,9 +110,9 @@ describe('ClaudeAgent', () => {
 
     const result = await agent.run('Test instruction', '/workspace', mockRunCommand);
 
-    expect(commands).toHaveLength(2);
+    expect(commands).toHaveLength(3);
     expect(commands[0]).toContain('base64');
-    expect(commands[0]).toContain('/tmp/.prompt.md');
+    expect(commands[0]).toContain('/tmp/.prompt-');
     expect(commands[1]).toContain('claude');
     expect(commands[1]).toContain('-p');
     expect(commands[1]).toContain('--dangerously-skip-permissions');
@@ -141,7 +144,7 @@ describe('ClaudeAgent', () => {
 
     expect(commands[1]).toContain("--model 'claude-opus-5'");
     // the prompt must stay the last argument
-    expect(commands[1].indexOf('--model')).toBeLessThan(commands[1].indexOf('/tmp/.prompt.md'));
+    expect(commands[1].indexOf('--model')).toBeLessThan(commands[1].indexOf('/tmp/.prompt-'));
   });
 
   it('quotes a model containing shell metacharacters', async () => {
@@ -293,10 +296,12 @@ describe('CommandAgent', () => {
 
     const result = await agent.run('Test instruction', '/workspace', mockRunCommand);
 
-    expect(commands).toHaveLength(2);
-    expect(commands[0]).toContain('base64 -d > /tmp/.prompt.md');
+    expect(commands).toHaveLength(3);
+    const promptFile = commands[0].split('base64 -d > ')[1];
+    expect(promptFile).toMatch(/^\/tmp\/\.prompt-[0-9a-f-]+\.md$/);
     expect(commands[1]).toContain("cd '/workspace'");
-    expect(commands[1]).toContain('cat /tmp/.prompt.md | node mycli.js');
+    expect(commands[1]).toContain(`cat ${promptFile} | node mycli.js`);
+    expect(commands[2]).toBe(`rm -f ${promptFile}`);
     expect(result).toContain('output');
   });
 
@@ -304,7 +309,7 @@ describe('CommandAgent', () => {
     const agent = new CommandAgent({ command: 'run' });
     let executedCommand = '';
     const mockRunCommand = vi.fn().mockImplementation(async (cmd: string): Promise<CommandResult> => {
-      executedCommand = cmd;
+      if (cmd.includes("cd ")) executedCommand = cmd;
       return { stdout: 'ok', stderr: '', exitCode: 0 };
     });
 
@@ -322,5 +327,48 @@ describe('CommandAgent', () => {
     const result = await agent.run('test', '/workspace', mockRunCommand);
     expect(result).toContain('partial');
     expect(result).toContain('error');
+  });
+
+  it('gives concurrent runs their own prompt file and removes it afterwards', async () => {
+    const agent = new CommandAgent({ command: 'cat' });
+    const sh = (cmd: string) => new Promise<CommandResult>(resolve =>
+      exec(cmd, (err, stdout, stderr) => resolve({ stdout, stderr, exitCode: err ? 1 : 0 })));
+    // Hold each run after it writes its prompt until both have written, so the
+    // two runs always interleave write, write, read, read.
+    const promptFiles: string[] = [];
+    let release!: () => void;
+    const bothWritten = new Promise<void>(r => { release = r; });
+    const runCommand = async (cmd: string): Promise<CommandResult> => {
+      const result = await sh(cmd);
+      if (cmd.includes('base64 -d >')) {
+        promptFiles.push(cmd.split('base64 -d > ')[1].trim());
+        if (promptFiles.length === 2) release();
+        await bothWritten;
+      }
+      return result;
+    };
+
+    const [a, b] = await Promise.all([
+      agent.run('prompt A', os.tmpdir(), runCommand),
+      agent.run('prompt B', os.tmpdir(), runCommand),
+    ]);
+
+    expect(a.trim()).toBe('prompt A');
+    expect(b.trim()).toBe('prompt B');
+    for (const f of promptFiles) expect(fs.existsSync(f)).toBe(false);
+  });
+
+  it('removes the prompt file when the command fails to run', async () => {
+    const agent = new CommandAgent({ command: 'run' });
+    const commands: string[] = [];
+    const mockRunCommand = vi.fn().mockImplementation(async (cmd: string): Promise<CommandResult> => {
+      commands.push(cmd);
+      if (cmd.includes('| run')) throw new Error('boom');
+      return { stdout: '', stderr: '', exitCode: 0 };
+    });
+
+    await expect(agent.run('test', '/workspace', mockRunCommand)).rejects.toThrow('boom');
+    const promptFile = commands[0].split('base64 -d > ')[1].trim();
+    expect(commands[commands.length - 1]).toBe(`rm -f ${promptFile}`);
   });
 });

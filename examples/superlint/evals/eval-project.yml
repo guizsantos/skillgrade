@@ -1,0 +1,19 @@
+# Superlint Example (Simple): an Eval Project for one Skill.
+#
+# Run it from this directory:
+#   cd examples/superlint/evals
+#   GEMINI_API_KEY=your-key skillgrade --smoke
+
+defaults:
+  harness: gemini-cli
+  runtime: docker
+  trials: 5
+  timeout: 300
+  threshold: 0.8
+  docker:
+    base: node:20-slim
+
+# Where the resources are, relative to this file. The skill found under `skills`
+# is a Skill, and its name is its directory's name: `superlint`.
+search_paths:
+  skills: ["../skills"]

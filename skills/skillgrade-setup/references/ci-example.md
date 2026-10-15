@@ -1,5 +1,7 @@
 # CI Integration Example
 
+Run skillgrade from the Eval Project directory (the one with `eval-project.yml`).
+
 ## GitHub Actions Workflow
 
 ```yaml
@@ -26,8 +28,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          cd skills/my-skill
-          skillgrade --regression --ci
+          cd evals
+          skillgrade --regression --ci --runtime=local --output=skillgrade-results
 ```
 
 ## Key Flags for CI
@@ -37,15 +39,19 @@ jobs:
 | `--ci` | Exit non-zero if pass rate is below threshold |
 | `--threshold=0.8` | Set the pass rate threshold (default: 0.8) |
 | `--regression` | Run 30 trials for high-confidence detection |
-| `--output=DIR` | Save reports to a specific directory for artifact upload |
+| `--runtime=local` | Run trials on the runner; no Docker image build |
+| `--force` | Run an Agent Definition even though the harness ignores some of its keys (results are marked `degraded`) |
+| `--output=DIR` | Save reports and Trial Records to a specific directory for artifact upload |
 
-## Uploading Reports as Artifacts
+## Uploading Reports and Trial Records as Artifacts
+
+Each resource's results, including its `<run_id>.trials.jsonl` Trial Records, are under `<output>/<resource name>/results/`.
 
 ```yaml
-      - name: Upload eval reports
+      - name: Upload eval results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: skillgrade-reports
-          path: skills/my-skill/results/
+          name: skillgrade-results
+          path: evals/skillgrade-results/
 ```

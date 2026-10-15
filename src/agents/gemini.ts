@@ -1,5 +1,5 @@
 import { BaseAgent, CommandResult } from '../types';
-import { shellQuote } from '../utils/shell';
+import { promptFilePath, shellQuote } from '../utils/shell';
 
 export interface GeminiAgentConfig {
     /** Model name, passed straight to `gemini --model`. */
@@ -21,16 +21,21 @@ export class GeminiAgent extends BaseAgent {
     ): Promise<string> {
         // Write instruction to a temp file to avoid shell escaping issues with long prompts
         const b64 = Buffer.from(instruction).toString('base64');
-        await runCommand(`echo '${b64}' | base64 -d > /tmp/.prompt.md`);
+        const promptFile = promptFilePath();
+        await runCommand(`echo '${b64}' | base64 -d > ${promptFile}`);
 
-        const model = this.config.model ? ` --model ${shellQuote(this.config.model)}` : '';
-        const command = `gemini -y --sandbox=none${model} -p "$(cat /tmp/.prompt.md)"`;
-        const result = await runCommand(command);
+        try {
+            const model = this.config.model ? ` --model ${shellQuote(this.config.model)}` : '';
+            const command = `gemini -y --sandbox=none${model} -p "$(cat ${promptFile})"`;
+            const result = await runCommand(command);
 
-        if (result.exitCode !== 0) {
-            console.error('GeminiAgent: Gemini CLI failed to execute correctly.');
+            if (result.exitCode !== 0) {
+                console.error('GeminiAgent: Gemini CLI failed to execute correctly.');
+            }
+
+            return result.stdout + '\n' + result.stderr;
+        } finally {
+            await runCommand(`rm -f ${promptFile}`);
         }
-
-        return result.stdout + '\n' + result.stderr;
     }
 }

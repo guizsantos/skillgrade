@@ -1,0 +1,38 @@
+# A Prompt's eval. The rendered Prompt is what the agent is asked, so a Prompt task needs
+# no `instruction` (one given here would follow the rendered Prompt). Each task supplies
+# the values of the placeholders: `product` comes from the project-wide `variables:` in
+# eval-project.yml, `version` and `audience` from the task.
+tasks:
+  - name: for-engineers
+    variables:
+      version: "2.1.0"
+      audience: engineers
+    expected:                       # the answer key: graders only, never the agent
+      version: "2.1.0"
+    graders:
+      - type: deterministic
+        run: node graders/check-summary.js
+        weight: 0.7
+      - type: llm_rubric
+        rubric: |
+          Is SUMMARY.txt exactly one sentence, and pitched at engineers rather than customers?
+        weight: 0.3
+    solution: solution/for-engineers.sh
+
+  - name: for-customers
+    variables:
+      version: "3.0.0"
+      audience: customers
+      product: Acme Reports Cloud   # overrides the project-wide value
+    expected:
+      version: "3.0.0"
+      product: Acme Reports Cloud
+    graders:
+      - type: deterministic
+        run: node graders/check-summary.js
+        weight: 0.7
+      - type: llm_rubric
+        rubric: |
+          Is SUMMARY.txt exactly one sentence, and pitched at customers rather than engineers?
+        weight: 0.3
+    solution: solution/for-customers.sh

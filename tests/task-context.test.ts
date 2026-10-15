@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 async function writeEval(yaml: string) {
-    await fsExtra.writeFile(path.join(dir, 'eval.yaml'), yaml);
+    await fsExtra.writeFile(path.join(dir, 'eval.yml'), yaml);
 }
 
 describe('expected and metadata on a task', () => {
