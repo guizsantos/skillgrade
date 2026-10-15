@@ -1,5 +1,5 @@
 import { BaseAgent, CommandResult, AgentResult, SkillTriggerInfo } from '../types';
-import { shellQuote } from '../utils/shell';
+import { promptFilePath, shellQuote } from '../utils/shell';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -141,17 +141,23 @@ export class CodexAgent extends BaseAgent {
     ): Promise<AgentResult> {
         // Write instruction to a temp file to avoid shell escaping issues with long prompts
         const b64 = Buffer.from(instruction).toString('base64');
-        await runCommand(`echo '${b64}' | base64 -d > /tmp/.prompt.md`);
+        const promptFile = promptFilePath();
+        await runCommand(`echo '${b64}' | base64 -d > ${promptFile}`);
 
-        // Get API keys from auth.json
-        const envVars = this.getCodexEnvVars();
+        let result: CommandResult;
+        try {
+            // Get API keys from auth.json
+            const envVars = this.getCodexEnvVars();
 
-        // Use --json for structured JSONL output, --ephemeral to avoid writing session files
-        // codex exec runs non-interactively; --full-auto enables sandboxed auto-execution
-        // --skip-git-repo-check allows running in non-git temp directories
-        const model = this.config.model ? ` --model ${shellQuote(this.config.model)}` : '';
-        const command = `cat /tmp/.prompt.md | codex exec --full-auto --skip-git-repo-check --json --ephemeral${model}`;
-        const result = await runCommand(command, Object.keys(envVars).length > 0 ? envVars : undefined);
+            // Use --json for structured JSONL output, --ephemeral to avoid writing session files
+            // codex exec runs non-interactively; --full-auto enables sandboxed auto-execution
+            // --skip-git-repo-check allows running in non-git temp directories
+            const model = this.config.model ? ` --model ${shellQuote(this.config.model)}` : '';
+            const command = `cat ${promptFile} | codex exec --full-auto --skip-git-repo-check --json --ephemeral${model}`;
+            result = await runCommand(command, Object.keys(envVars).length > 0 ? envVars : undefined);
+        } finally {
+            await runCommand(`rm -f ${promptFile}`);
+        }
 
         if (result.exitCode !== 0) {
             console.error('CodexAgent: Codex CLI failed to execute correctly.');

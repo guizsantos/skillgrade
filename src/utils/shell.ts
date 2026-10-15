@@ -1,6 +1,7 @@
 /**
  * Shell helpers for building agent CLI invocations.
  */
+import { randomUUID } from 'crypto';
 
 /**
  * Single-quote a value for a POSIX shell.
@@ -11,4 +12,13 @@
  */
 export function shellQuote(value: string): string {
     return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * A fresh path for an agent's prompt file, unique per invocation so concurrent
+ * runs (parallel trials, several skillgrade processes) never share one. It is
+ * resolved by the runtime's shell (host or container), hence a literal /tmp.
+ */
+export function promptFilePath(): string {
+    return `/tmp/.prompt-${randomUUID()}.md`;
 }

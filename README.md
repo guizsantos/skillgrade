@@ -678,7 +678,7 @@ defaults:
 
 ### How the instruction reaches your command
 
-The task instruction (for a Prompt, the rendered Prompt) is **piped to your command's stdin** (skillgrade writes it to `/tmp/.prompt.md`, then runs `cat /tmp/.prompt.md | <command>` inside the workspace directory). If your CLI takes the prompt as an argument instead, wrap it in a one-line script that reads stdin.
+The task instruction (for a Prompt, the rendered Prompt) is **piped to your command's stdin** (skillgrade writes it to a unique temporary file under `/tmp`, runs `cat <that file> | <command>` inside the workspace directory). If your CLI takes the prompt as an argument instead, wrap it in a one-line script that reads stdin.
 
 Your command runs in the workspace and is free to read/edit files there. Graders score the resulting workspace state (and any live checks), not your command's stdout, so any agent slots in cleanly. An Agent Definition or Project Instructions reach it as `AGENTS.md` in the workspace.
 
