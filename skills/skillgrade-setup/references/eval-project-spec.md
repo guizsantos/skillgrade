@@ -102,6 +102,8 @@ copied in; graders reach the workspace only after the agent has exited.
 
 `workspace: [{task: ref}]` starts a task from other tasks' workspaces, copied in order, then the task's own folder on top.
 
+Borrowing is recursive: each referenced task contributes its own effective workspace (what it borrows, depth-first in declared order, then its folder). Each reference is resolved from the eval that declares it. A folder reached more than once is copied only at its first place in that order. Cycles, including a task borrowing itself, are rejected before any trial with the cycle's path.
+
 | Reference | Resolves to |
 |-----------|-------------|
 | `name` | a task of the same eval only. Unknown names error with `"name" not defined in "resource"` and, if another resource has it, a hint such as `did you mean name@skills:other?` |

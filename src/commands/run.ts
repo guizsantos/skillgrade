@@ -501,6 +501,12 @@ async function loadSuite(dir: string, opts: RunOptions, log: boolean) {
 /**
  * Resolve every task's `workspace: [{task: ...}]` references, the unselected
  * tasks' too, so a typo is not hidden by a selection. Fails before any trial.
+ *
+ * Borrowing is recursive: a task's effective workspace is the effective
+ * workspace of each task it references, depth-first in declared order, then its
+ * own folder on top. A folder reached twice (a diamond) is copied once, at its
+ * first place in that order, so it never lands on top of a task built on it.
+ * A cycle is an error.
  */
 function resolveBorrowedWorkspaces(targets: Target[]) {
     const catalogue = targets.map(t => ({
@@ -509,9 +515,12 @@ function resolveBorrowedWorkspaces(targets: Target[]) {
         tasks: t.config.tasks.map(task => task.name),
         evalDir: t.resource.evalDir,
     }));
+
+    // Each task's direct references, each resolved from the eval that declares it; keyed by its own folder
+    const direct = new Map<string, { label: string; refs: string[] }>();
     targets.forEach((target, i) => {
         for (const task of target.config.tasks) {
-            const dirs = (task.workspaceFrom ?? []).map(ref => {
+            const refs = (task.workspaceFrom ?? []).map(ref => {
                 try {
                     const { task: name, evalDir } = resolveTaskRef(ref, catalogue[i], catalogue);
                     return path.join(evalDir, 'workspace', name);
@@ -519,7 +528,36 @@ function resolveBorrowedWorkspaces(targets: Target[]) {
                     throw new Error(`${target.resource.name} / ${task.name}: workspace: ${err instanceof Error ? err.message : err}`);
                 }
             });
-            target.borrowed.set(task.name, dirs);
+            direct.set(path.join(target.resource.evalDir, 'workspace', task.name), {
+                label: `${task.name}@${catalogue[i].kind}:${catalogue[i].name}`,
+                refs,
+            });
+        }
+    });
+
+    // The folders a task's own folder goes on top of, in copy order
+    const memo = new Map<string, string[]>();
+    const borrowedBy = (dir: string, stack: string[]): string[] => {
+        const cached = memo.get(dir);
+        if (cached) return cached;
+        const out: string[] = [];
+        for (const ref of direct.get(dir)!.refs) {
+            if (stack.includes(ref)) {
+                const cycle = [...stack.slice(stack.indexOf(ref)), ref].map(d => direct.get(d)!.label);
+                throw new Error(`workspace: task references form a cycle: ${cycle.join(' -> ')}`);
+            }
+            for (const d of [...borrowedBy(ref, [...stack, ref]), ref]) {
+                if (!out.includes(d)) out.push(d);
+            }
+        }
+        memo.set(dir, out);
+        return out;
+    };
+
+    targets.forEach(target => {
+        for (const task of target.config.tasks) {
+            const dir = path.join(target.resource.evalDir, 'workspace', task.name);
+            target.borrowed.set(task.name, borrowedBy(dir, [dir]));
         }
     });
 }

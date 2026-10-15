@@ -54,7 +54,7 @@ A reusable LLM-grader definition under `llm_judges/`, referenced from a grader b
 The directory name of a Static Resource (for a Prompt, its file name without `.md`). Its frontmatter `name:` is required and must equal it; a missing or different name fails loudly. Names are unique within a kind, not across kinds. Project Instructions are exempt: they carry no frontmatter, and their name is the directory name only.
 
 **Task Reference**:
-`task: name` resolves only within the same Eval, and an unknown name errors with a project-wide "did you mean `name@skills:other`?" hint. `task: name@resource` resolves across the whole project when `resource` is unique, and errors when it is ambiguous across kinds. The full form is `task: name@kind:resource`.
+`task: name` resolves only within the same Eval, and an unknown name errors with a project-wide "did you mean `name@skills:other`?" hint. `task: name@resource` resolves across the whole project when `resource` is unique, and errors when it is ambiguous across kinds. The full form is `task: name@kind:resource`. Borrowing is recursive (a referenced task brings what it borrows, each reference resolved from the Eval that declares it); a cycle fails loudly before any trial.
 
 **Gateway Resource**:
 The record in the LiteLLM gateway that corresponds to a Static Resource, and that Trial Records are published to. Matched by name; zero or multiple matches fail loudly.

@@ -175,6 +175,8 @@ tasks:
 
 The listed workspaces are copied in order, then the task's own folder on top.
 
+Borrowing is recursive: a referenced task brings what it borrows. If `edit-config` borrows `setup` and `setup` borrows `base`, `edit-config` gets `base`, then `setup`'s folder, then its own; later layers overwrite earlier files. Each reference is resolved from the eval that declares it, so a bare `base` in `setup`'s eval means that eval's `base`. A folder reached twice (two borrowed tasks that both borrow `base`) is copied once, at its first place in that depth-first order. A cycle, including a task that borrows itself, is an error before any trial, naming its path: `task references form a cycle: a@skills:x -> b@skills:x -> a@skills:x`.
+
 | Reference | Resolves to |
 |-----------|-------------|
 | `name` | a task of the **same eval** only. An unknown name errors with `"name" not defined in "resource"` and, when another resource has it, a hint: `did you mean one of name@skills:other?` |
