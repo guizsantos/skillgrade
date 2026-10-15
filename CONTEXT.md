@@ -48,7 +48,7 @@ The `eval.yml` in a resource's directory of the Eval Project, holding its tasks.
 One scenario in an Eval, with expected results, graders and a solution. Its workspace is the folder named after it under the Eval's `workspace/`, so the name is never repeated in YAML. No folder means an empty workspace. A task can reuse another's workspace with `workspace: [{task: name[@resource]}]`. `expected` and `solution` stay in YAML and only graders see them.
 
 **Judge**:
-A reusable LLM-grader definition under `llm_judges/`, referenced from a grader by name (`llm_judge: judge-name`).
+A reusable LLM-grader definition: a file `llm_judges/<name>.md` of an Eval, referenced from a grader by its file name (`llm_judge: name`). Its optional YAML frontmatter carries `llm_provider` and `llm_model`; the body after it is the rubric. The `weight` is not part of a Judge: it stays on each grader item, so tasks can weigh the same Judge differently. A judge grader's LLM is layered per field, most specific wins: project defaults, then the eval's `defaults`, then the Judge's frontmatter; a task-level `llm_provider`/`llm_model` fills a field the Judge leaves unset. No implicit provider applies to a Judge: a field still unset fails before any trial. Setting `llm_provider`/`llm_model` on the grader item, or on a task for a field its Judge also sets, is an error, so nothing is silently overridden.
 
 **Resource Name**:
 The directory name of a Static Resource (for a Prompt, its file name without `.md`). Its frontmatter `name:` is required and must equal it; a missing or different name fails loudly. Names are unique within a kind, not across kinds. Project Instructions are exempt: they carry no frontmatter, and their name is the directory name only.

@@ -15,6 +15,8 @@ export interface FakeLlm {
     url: string;
     /** Every judge prompt received, in order. */
     prompts: string[];
+    /** The model each prompt was sent with, in the same order. */
+    models: string[];
     /** Point the `openai` llm_provider at this server for the rest of the test. */
     use(): void;
     close(): Promise<void>;
@@ -22,12 +24,15 @@ export interface FakeLlm {
 
 export async function fakeLlm(reply: (prompt: string) => { score: number; reasoning?: string } = () => ({ score: 1, reasoning: 'fine' })): Promise<FakeLlm> {
     const prompts: string[] = [];
+    const models: string[] = [];
     const server = http.createServer((req, res) => {
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
-            const prompt: string = JSON.parse(body).messages[0].content;
+            const parsed = JSON.parse(body);
+            const prompt: string = parsed.messages[0].content;
             prompts.push(prompt);
+            models.push(parsed.model);
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply(prompt)) } }] }));
         });
@@ -41,7 +46,7 @@ export async function fakeLlm(reply: (prompt: string) => { score: number; reason
         else process.env[name] = value;
     };
     return {
-        url, prompts,
+        url, prompts, models,
         use() {
             process.env.OPENAI_API_KEY = 'test-key';
             process.env.OPENAI_BASE_URL = url;

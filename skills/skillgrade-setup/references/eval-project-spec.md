@@ -120,13 +120,14 @@ References of every task are checked before any trial, selected or not.
 | `run` | string | Deterministic only | Command to execute, e.g. `bash graders/check.sh`; `graders/` of the eval is staged for it |
 | `setup` | string | No | Install command for grader dependencies (Docker image build) |
 | `rubric` | string | LLM only | Evaluation rubric text, or a file path |
-| `llm_judge` | string | No | The name of a Judge: the file `llm_judges/<name>.md` of this eval's directory. It is the rubric, so give either `llm_judge` or `rubric`; `type` may be left out. |
+| `llm_judge` | string | No | The name of a Judge: the file `llm_judges/<name>.md` of this eval's directory. It supplies the rubric and the LLM, so give either `llm_judge` or `rubric`, and do not set `llm_provider`/`llm_model` on the grader (an error); `type` may be left out. `weight` stays here. |
 | `llm_provider` | string | No | LLM API that scores the rubric: `gemini` (default), `anthropic`, `openai`, or `jev` |
 | `llm_model` | string | No | LLM model override. Highest precedence. |
 | `weight` | number | No | Grader weight (default: 1) |
 
-**Judge file format.** `llm_judges/<name>.md` is plain text: its whole content, trimmed, is the rubric given to the LLM (no frontmatter
-convention, and no variables). The name must be a plain name (letters, digits, `_`, `-`, `.`). A missing or empty file fails before any trial.
+**Judge file format.** `llm_judges/<name>.md` has optional YAML frontmatter with `llm_provider` and `llm_model`; the body after it, trimmed, is the rubric given to the LLM (the frontmatter is not part of it; no variables). The name is the file name, a plain name (letters, digits, `_`, `-`, `.`). A missing or empty file fails before any trial.
+
+**Judge LLM precedence.** Per field, most specific wins: `eval-project.yml` defaults < the eval's `defaults` < the judge's frontmatter. A task-level `llm_provider`/`llm_model` fills a field the judge leaves unset. A judge grader has no implicit provider (an inline `rubric` grader still defaults to `gemini`): a field still unset fails before any trial. Errors, also before any trial: `llm_provider`/`llm_model` on a grader item that has `llm_judge`; a task-level field that a judge used by its graders also sets.
 
 ### File references
 

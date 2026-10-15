@@ -16,6 +16,7 @@ import {
 import { loadYamlWithImports, sourceFileOf } from './imports';
 import { harnessName } from '../agents/registry';
 import { parseTaskRef } from './taskRef';
+import { frontmatter, promptBody } from './project';
 
 // We use a simple YAML parser — js-yaml is the standard
 // For now, we'll use a lightweight approach: JSON-compatible YAML subset
@@ -72,19 +73,74 @@ export async function loadEvalConfig(
 export const JUDGES_DIR = 'llm_judges';
 export const judgeFile = (evalDir: string, name: string) => path.join(evalDir, JUDGES_DIR, `${name}.md`);
 
-/** Every `llm_judge:` names a definition that exists, so a bad name fails before any trial runs. */
+/** A reusable Judge: its rubric, and the LLM settings its frontmatter sets (each one optional). */
+export interface Judge {
+    rubric: string;
+    llm_provider?: LlmProvider;
+    llm_model?: string;
+}
+
+/**
+ * Read the Judge `name` of an eval. The optional YAML frontmatter holds its
+ * `llm_provider` and `llm_model`; the body after it, trimmed, is the rubric.
+ */
+export async function loadJudge(evalDir: string, name: string, taskName: string): Promise<Judge> {
+    const where = `${path.basename(evalDir)}: task "${taskName}", llm_judge "${name}"`;
+    const file = judgeFile(evalDir, name);
+    const stat = await fs.stat(file).catch(() => null);
+    if (!stat?.isFile()) {
+        throw new Error(`${path.basename(evalDir)}: task "${taskName}" uses llm_judge "${name}", but there is no ${JUDGES_DIR}/${name}.md in ${evalDir}`);
+    }
+    const content = await fs.readFile(file, 'utf-8');
+    const rubric = promptBody(content).trim();
+    if (!rubric) {
+        throw new Error(`${path.basename(evalDir)}: llm_judge "${name}" is empty (${file}); a judge needs a rubric`);
+    }
+    const fm = frontmatter(content);
+    const { llm_provider, llm_model } = fm;
+    if (llm_provider !== undefined && (typeof llm_provider !== 'string' || !VALID_LLM_PROVIDERS.includes(llm_provider as LlmProvider))) {
+        throw new Error(`${where}: llm_provider in ${file} must be one of ${VALID_LLM_PROVIDERS.join(', ')}, got ${JSON.stringify(llm_provider)}`);
+    }
+    if (llm_model !== undefined && (typeof llm_model !== 'string' || !llm_model.trim())) {
+        throw new Error(`${where}: llm_model in ${file} must be a model name, got ${JSON.stringify(llm_model)}`);
+    }
+    return { rubric, llm_provider: llm_provider as LlmProvider | undefined, llm_model: llm_model as string | undefined };
+}
+
+const LLM_FIELDS = ['llm_provider', 'llm_model'] as const;
+
+/**
+ * The LLM a judge grader scores with, field by field, most specific first:
+ * the judge's frontmatter, then the task's own setting (which fills what the
+ * judge leaves unset), then the eval's defaults over the project's. Nothing
+ * is overridden silently: a setting on the grader item, or a task setting the
+ * judge also sets, is an error, and so is a field nothing resolves. There is
+ * no implicit provider here, unlike for an inline rubric.
+ */
+function judgeLlm(evalDir: string, task: EvalTaskConfig, g: { llm_judge?: string }, judge: Judge, defaults: EvalDefaults): Pick<Judge, 'llm_provider' | 'llm_model'> {
+    const where = `${path.basename(evalDir)}: task "${task.name}", llm_judge "${g.llm_judge}"`;
+    const out: Record<string, any> = {};
+    for (const field of LLM_FIELDS) {
+        if ((g as any)[field] !== undefined) {
+            throw new Error(`${where}: the grader sets ${field} in eval.yml, but a judge carries its own LLM settings; set it in ${JUDGES_DIR}/${g.llm_judge}.md or remove it from the grader`);
+        }
+        if (task[field] && judge[field]) {
+            throw new Error(`${where}: the task sets ${field} ("${task[field]}") and the judge sets it too ("${judge[field]}"); remove one so nothing is silently overridden`);
+        }
+        out[field] = judge[field] || task[field] || defaults[field];
+        if (!out[field]) {
+            throw new Error(`${where}: ${field} is not set. Set it in the judge's frontmatter (${JUDGES_DIR}/${g.llm_judge}.md), the eval's defaults, or eval-project.yml's defaults`);
+        }
+    }
+    return out;
+}
+
+/** Every `llm_judge:` names a definition that exists and resolves to an LLM, so a bad judge fails before any trial runs. */
 async function checkJudges(config: EvalConfig, evalDir: string) {
     for (const task of config.tasks) {
         for (const g of task.graders) {
             if (g.llm_judge === undefined) continue;
-            const file = judgeFile(evalDir, g.llm_judge);
-            const stat = await fs.stat(file).catch(() => null);
-            if (!stat?.isFile()) {
-                throw new Error(`${path.basename(evalDir)}: task "${task.name}" uses llm_judge "${g.llm_judge}", but there is no ${JUDGES_DIR}/${g.llm_judge}.md in ${evalDir}`);
-            }
-            if (!(await fs.readFile(file, 'utf-8')).trim()) {
-                throw new Error(`${path.basename(evalDir)}: llm_judge "${g.llm_judge}" is empty (${file}); a judge needs a rubric`);
-            }
+            judgeLlm(evalDir, task, g, await loadJudge(evalDir, g.llm_judge, task.name), config.defaults);
         }
     }
 }
@@ -326,7 +382,9 @@ export async function resolveTask(
                 resolved.run = await resolveFileOrInline(g.run, baseDirs);
             }
             if (g.llm_judge !== undefined) {
-                resolved.rubric = (await fs.readFile(judgeFile(baseDir, g.llm_judge), 'utf-8')).trim();
+                const judge = await loadJudge(baseDir, g.llm_judge, task.name);
+                resolved.rubric = judge.rubric;
+                Object.assign(resolved, judgeLlm(baseDir, task, g, judge, defaults));
             } else if (g.type === 'llm_rubric' && g.rubric) {
                 resolved.rubric = await resolveFileOrInline(g.rubric, baseDirs);
             }

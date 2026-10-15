@@ -1,3 +1,7 @@
+---
+llm_provider: gemini
+llm_model: gemini-3-flash-preview
+---
 Evaluate the agent's migration approach:
 
 Correctness (0-0.4):

@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { evalProject, evalYml, fakeAgent, greeterProject, skillMd, task } from './helpers/evalProject';
+import { evalProject, evalYml, fakeAgent, greeterProject, projectYml, skillMd, task } from './helpers/evalProject';
 import { fakeLlm, type FakeLlm } from './helpers/fake-llm';
 
-const judged = (judge: string, extra: Record<string, unknown> = {}) => ({
-    llm_judge: judge, llm_provider: 'openai', llm_model: 'judge-model', ...extra,
-});
+const judged = (judge: string, extra: Record<string, unknown> = {}) => ({ llm_judge: judge, ...extra });
 const judgedTask = (name: string, ...graders: unknown[]) => task(name, { graders });
+
+/** A judge file: frontmatter with the LLM settings, then the rubric. */
+const FM = '---\nllm_provider: openai\nllm_model: judge-model\n---\n';
+const judgeFileOf = (rubric: string, frontmatter = FM) => frontmatter + rubric;
+const JUDGE = 'evals/skills/greeter/llm_judges/quality.md';
 
 describe('reusable LLM judges (llm_judge: name)', () => {
     let llm: FakeLlm;
@@ -18,7 +21,7 @@ describe('reusable LLM judges (llm_judge: name)', () => {
     it('runs a grader with the judge defined under the eval\'s llm_judges/', async () => {
         const fx = await evalProject(ctx => ({
             ...greeterProject(fakeAgent({ record: ctx.record }), [judgedTask('say', judged('quality'))]),
-            'evals/skills/greeter/llm_judges/quality.md': 'Is the greeting BE-STRICT polite?',
+            [JUDGE]: judgeFileOf('Is the greeting BE-STRICT polite?'),
         }));
         await fx.run();
 
@@ -47,7 +50,7 @@ describe('reusable LLM judges (llm_judge: name)', () => {
             ...greeterProject(fakeAgent({ record: ctx.record }), [judgedTask('say', judged('quality'))]),
             'skills/farewell/SKILL.md': skillMd('farewell'),
             'evals/skills/farewell/eval.yml': evalYml([task('wave')]),
-            'evals/skills/farewell/llm_judges/quality.md': 'the farewell judge',
+            'evals/skills/farewell/llm_judges/quality.md': judgeFileOf('the farewell judge'),
         }));
         await expect(fx.run()).rejects.toThrow(/greeter.*quality/s);
         expect(await fx.ran()).toBe(false);
@@ -65,7 +68,7 @@ describe('reusable LLM judges (llm_judge: name)', () => {
     it('rejects an empty judge before any trial', async () => {
         const fx = await evalProject(ctx => ({
             ...greeterProject(fakeAgent({ record: ctx.record }), [judgedTask('say', judged('quality'))]),
-            'evals/skills/greeter/llm_judges/quality.md': '  \n',
+            [JUDGE]: FM + '  \n',
         }));
         await expect(fx.run()).rejects.toThrow(/quality.*empty/s);
         expect(await fx.ran()).toBe(false);
@@ -74,7 +77,7 @@ describe('reusable LLM judges (llm_judge: name)', () => {
     it('rejects a grader that has both an inline rubric and a judge', async () => {
         const fx = await evalProject(ctx => ({
             ...greeterProject(fakeAgent({ record: ctx.record }), [judgedTask('say', judged('quality', { rubric: 'inline' }))]),
-            'evals/skills/greeter/llm_judges/quality.md': 'judge',
+            [JUDGE]: judgeFileOf('judge'),
         }));
         await expect(fx.run()).rejects.toThrow(/rubric.*llm_judge|llm_judge.*rubric/s);
         expect(await fx.ran()).toBe(false);
@@ -83,7 +86,7 @@ describe('reusable LLM judges (llm_judge: name)', () => {
     it('never puts a judge definition in the agent\'s workspace', async () => {
         const fx = await evalProject(ctx => ({
             ...greeterProject(fakeAgent({ record: ctx.record }), [judgedTask('say', judged('quality'))]),
-            'evals/skills/greeter/llm_judges/quality.md': 'JUDGE-RUBRIC-TEXT',
+            [JUDGE]: judgeFileOf('JUDGE-RUBRIC-TEXT'),
             'evals/skills/greeter/workspace/say/input.txt': 'visible',
         }));
         await fx.run();
@@ -100,7 +103,7 @@ describe('reusable LLM judges (llm_judge: name)', () => {
                 judgedTask('say', judged('quality'), judged('quality', { weight: 2 })),
                 judgedTask('other', judged('quality')),
             ]),
-            'evals/skills/greeter/llm_judges/quality.md': 'shared BE-STRICT rubric',
+            [JUDGE]: judgeFileOf('shared BE-STRICT rubric'),
         }));
         await fx.run();
 
@@ -120,10 +123,137 @@ describe('reusable LLM judges (llm_judge: name)', () => {
                     judged('quality'),
                 ] }),
             ]),
-            'evals/skills/greeter/llm_judges/quality.md': 'rubric',
+            [JUDGE]: judgeFileOf('rubric'),
         }));
         await fx.run();
         const [report] = await fx.reports('greeter');
         expect(report.trials[0].grader_results.map(g => g.grader_type)).toEqual(['deterministic', 'llm_rubric']);
+    });
+
+    describe('the LLM settings of a judge', () => {
+        const noScore = { type: 'deterministic', run: `echo '{"score":0,"details":"no"}'` };
+        /** A project built from its project defaults, eval defaults, tasks and judge file. */
+        const project = (o: {
+            project?: Record<string, unknown>; evalDefaults?: Record<string, unknown>;
+            tasks?: unknown[]; judge?: string;
+        } = {}) => evalProject(ctx => {
+            const command = fakeAgent({ record: ctx.record });
+            const tasks = o.tasks ?? [judgedTask('say', judged('quality'))];
+            return {
+                ...greeterProject(command, tasks),
+                'evals/eval-project.yml': projectYml(command, { defaults: { harness: 'command', runtime: 'local', trials: 1, command, ...o.project } }),
+                'evals/skills/greeter/eval.yml': evalYml(tasks, o.evalDefaults ? { defaults: o.evalDefaults } : {}),
+                [JUDGE]: o.judge ?? judgeFileOf('rubric'),
+            };
+        });
+
+        it('are read from the frontmatter, which is not part of the rubric', async () => {
+            const fx = await project({ judge: judgeFileOf('THE RUBRIC BODY') });
+            await fx.run();
+            expect(llm.models).toEqual(['judge-model']);
+            expect(llm.prompts[0]).toContain('THE RUBRIC BODY');
+            expect(llm.prompts[0]).not.toContain('llm_provider');
+            expect(llm.prompts[0]).not.toContain('judge-model');
+        });
+
+        it('are layered: the judge beats the eval defaults, which beat the project defaults', async () => {
+            const fx = await project({
+                project: { llm_provider: 'anthropic', llm_model: 'm-project' },
+                evalDefaults: { llm_provider: 'gemini', llm_model: 'm-eval' },
+            });
+            await fx.run();
+            // the openai provider and its model reached the fake server: the judge's, not anthropic's or gemini's
+            expect(llm.models).toEqual(['judge-model']);
+        });
+
+        it('are layered one field at a time', async () => {
+            const fx = await project({
+                project: { llm_provider: 'anthropic', llm_model: 'm-project' },
+                evalDefaults: { llm_model: 'm-eval' },
+                judge: judgeFileOf('rubric', '---\nllm_provider: openai\n---\n'),
+            });
+            await fx.run();
+            expect(llm.models).toEqual(['m-eval']);   // model: eval defaults over project; provider: the judge's
+        });
+
+        it('come from the project defaults when nothing more specific sets them', async () => {
+            const fx = await project({ project: { llm_provider: 'openai', llm_model: 'm-project' }, judge: 'bare rubric' });
+            await fx.run();
+            expect(llm.models).toEqual(['m-project']);
+            expect(llm.prompts[0]).toContain('bare rubric');
+        });
+
+        it('get no implicit provider: an unresolved one fails before any trial, naming eval, task, judge and field', async () => {
+            const fx = await project({ judge: judgeFileOf('rubric', '---\nllm_model: m\n---\n') });
+            await expect(fx.run()).rejects.toThrow(/greeter[\s\S]*say[\s\S]*quality[\s\S]*llm_provider/);
+            expect(await fx.ran()).toBe(false);
+            expect(llm.prompts).toEqual([]);
+        });
+
+        it('fail before any trial on an unresolved model, naming eval, task, judge and field', async () => {
+            const fx = await project({
+                tasks: [task('first'), judgedTask('say', judged('quality'))],
+                judge: judgeFileOf('rubric', '---\nllm_provider: openai\n---\n'),
+            });
+            await expect(fx.run()).rejects.toThrow(/greeter[\s\S]*say[\s\S]*quality[\s\S]*llm_model/);
+            expect(await fx.ran()).toBe(false);
+        });
+
+        it('reject an llm_provider in the frontmatter that is not a provider', async () => {
+            const fx = await project({ judge: judgeFileOf('rubric', '---\nllm_provider: nope\nllm_model: m\n---\n') });
+            await expect(fx.run()).rejects.toThrow(/quality[\s\S]*llm_provider|llm_provider[\s\S]*quality/);
+            expect(await fx.ran()).toBe(false);
+        });
+
+        it.each([['llm_model', 'x'], ['llm_provider', 'openai']])('conflict when a judge grader also sets %s in eval.yml', async (field, value) => {
+            const fx = await project({ tasks: [judgedTask('say', judged('quality', { [field]: value }))] });
+            await expect(fx.run()).rejects.toThrow(new RegExp(`greeter[\\s\\S]*say[\\s\\S]*quality[\\s\\S]*${field}`));
+            expect(await fx.ran()).toBe(false);
+            expect(llm.prompts).toEqual([]);
+        });
+
+        it.each([['llm_model', 'task-model'], ['llm_provider', 'openai']])('conflict when a task sets %s and its judge sets the same field', async (field, value) => {
+            const fx = await project({ tasks: [task('say', { graders: [judged('quality')], [field]: value })] });
+            await expect(fx.run()).rejects.toThrow(new RegExp(`greeter[\\s\\S]*say[\\s\\S]*quality[\\s\\S]*${field}`));
+            expect(await fx.ran()).toBe(false);
+            expect(llm.prompts).toEqual([]);
+        });
+
+        it('let a task fill the field its judge leaves unset, with no conflict', async () => {
+            const fx = await project({
+                tasks: [task('say', { graders: [judged('quality')], llm_model: 'task-model' })],
+                judge: judgeFileOf('rubric', '---\nllm_provider: openai\n---\n'),
+            });
+            await fx.run();
+            expect(llm.models).toEqual(['task-model']);
+        });
+
+        it('leave task-level settings working for inline rubric graders, even in a project with judges', async () => {
+            const fx = await project({
+                tasks: [
+                    task('say', { graders: [{ type: 'llm_rubric', rubric: 'inline' }], llm_provider: 'openai', llm_model: 'task-model' }),
+                    judgedTask('other', judged('quality')),
+                ],
+            });
+            await fx.run();
+            expect([...llm.models].sort()).toEqual(['judge-model', 'task-model']);
+        });
+
+        it('keep the weight on each grader item: one judge, a different weight in each task', async () => {
+            const fx = await project({
+                tasks: [
+                    task('heavy', { graders: [judged('quality', { weight: 1 }), noScore] }),
+                    task('light', { graders: [judged('quality', { weight: 0.5 }), noScore] }),
+                ],
+            });
+            await fx.run();
+            const reports = await fx.reports('greeter');
+            const trial = (name: string) => reports.find(r => r.task === name)!.trials[0];
+            const judgeWeight = (name: string) => trial(name).grader_results.find(g => g.grader_type === 'llm_rubric')!.weight;
+            expect(judgeWeight('heavy')).toBe(1);
+            expect(judgeWeight('light')).toBe(0.5);
+            expect(trial('heavy').reward).toBeCloseTo(1 / 2);
+            expect(trial('light').reward).toBeCloseTo(0.5 / 1.5);
+        });
     });
 });

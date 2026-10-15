@@ -199,14 +199,24 @@ graders:
 ```
 
 ```markdown
-<!-- llm_judges/politeness.md: plain text, the whole file is the rubric -->
+<!-- llm_judges/politeness.md: optional frontmatter for the LLM, then the rubric -->
+---
+llm_provider: anthropic
+llm_model: claude-sonnet-5
+---
 Was the reply polite? Did it greet the user by name?
 
 Tone (0-0.5): ...
 Completeness (0-0.5): ...
 ```
 
-The file's whole content, trimmed, is the rubric given to the LLM (no frontmatter, no variables). The name is a plain name (letters, digits, `_`, `-`, `.`). `llm_judge` makes the grader an `llm_rubric`, so `type` can be left out and `llm_provider`, `llm_model` and `weight` work as usual; give either `llm_judge` or `rubric`, not both. A missing or empty judge file fails before any trial. Judges are per eval: they live in the resource's directory of the Eval Project, so the agent never sees them.
+The body of the file after the frontmatter, trimmed, is the rubric given to the LLM (no variables); the frontmatter is not part of it. The name is the file name, a plain name (letters, digits, `_`, `-`, `.`). `llm_judge` makes the grader an `llm_rubric`, so `type` can be left out; give either `llm_judge` or `rubric`, not both. A missing or empty judge file fails before any trial. Judges are per eval: they live in the resource's directory of the Eval Project, so the agent never sees them.
+
+**The judge's LLM.** The optional frontmatter keys are `llm_provider` (`gemini`, `anthropic`, `openai` or `jev`) and `llm_model`. For a judge grader each field is layered on its own, most specific wins: `eval-project.yml` defaults, then the eval's own `defaults`, then the judge's frontmatter. A task's own `llm_provider`/`llm_model` fills a field the judge leaves unset. Unlike an inline `rubric` grader (which still falls back to `gemini`), a judge has no implicit provider: if `llm_provider` or `llm_model` is still unset after layering, the run fails before any trial, naming the eval, task, judge and field.
+
+Nothing is overridden silently. These are errors before any trial: a grader item with `llm_judge` that also sets `llm_provider` or `llm_model`, and a task that sets `llm_provider` or `llm_model` while a judge used by one of its graders sets the same field. The check is per field: a judge that sets only the provider combined with a task that sets only the model is fine.
+
+The `weight` stays on each grader item in `eval.yml`, so two tasks can use the same judge with different weights.
 
 ### Prompt variables
 

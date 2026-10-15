@@ -32,7 +32,7 @@ description: Sets up and runs skillgrade evaluation pipelines for Static Resourc
    - `instruction`: what the agent should accomplish (optional for a Prompt, whose rendered text is the ask)
    - `graders`: one or more scoring mechanisms (see the `skillgrade-graders` skill)
 4. Put the files a task starts with in `workspace/<task name>/` next to `eval.yml`. No folder means an empty workspace. To reuse another task's files, write `workspace: [{task: other}]` (`other@resource` or `other@kind:resource` across resources).
-5. Put grader scripts in `graders/`, reusable rubrics in `llm_judges/<name>.md` (used as `llm_judge: <name>`), and reference solutions in `solution/`.
+5. Put grader scripts in `graders/`, reusable rubrics in `llm_judges/<name>.md` (used as `llm_judge: <name>`; optional frontmatter `llm_provider`/`llm_model`, the body is the rubric), and reference solutions in `solution/`.
 6. For a Prompt, give each task its `variables:` (over the project-wide `variables:` in `eval-project.yml`).
 7. Set `defaults:` in `eval-project.yml` for harness, runtime, trials, timeout, and threshold.
 

@@ -45,12 +45,12 @@ description: Authors deterministic and LLM rubric graders for skillgrade evaluat
      llm_provider: gemini           # optional: gemini (default) | anthropic | openai | jev
      llm_model: gemini-3.5-flash    # optional model override (defaults to the latest dynamically resolved flash model)
    ```
-4. For long or reusable rubrics, write a Judge: a plain-text file `llm_judges/<name>.md` in the eval's directory whose whole content is the rubric, and reference it by name instead of `type` and `rubric`:
+4. For long or reusable rubrics, write a Judge: a file `llm_judges/<name>.md` in the eval's directory with optional frontmatter (`llm_provider`, `llm_model`) and the rubric as its body, and reference it by name instead of `type` and `rubric`:
    ```yaml
    - llm_judge: workflow-quality    # llm_judges/workflow-quality.md
      weight: 0.3
    ```
-   A grader takes either `llm_judge` or `rubric`, not both. A missing or empty judge file fails the run before any trial.
+   A grader takes either `llm_judge` or `rubric`, not both, and must not set `llm_provider`/`llm_model` itself (the judge does; `weight` stays on the grader). A judge's LLM is layered per field: project defaults < eval `defaults` < the judge's frontmatter, with a task-level setting filling a field the judge leaves unset (and an error if the judge sets it too). A judge has no implicit provider: an unset `llm_provider` or `llm_model` fails the run before any trial, as does a missing or empty judge file.
 
 **Step 4: Combine Multiple Graders**
 1. Assign weights to each grader based on importance. Weights are normalized automatically.

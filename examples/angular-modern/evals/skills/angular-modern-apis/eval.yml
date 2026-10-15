@@ -4,6 +4,7 @@
 # - A JavaScript grader doing static analysis (graders/check-modern-apis.js)
 # - Multi-check scoring with partial credit (5 checks, each worth 0.2)
 # - A reusable Judge: `llm_judge: migration-quality` loads llm_judges/migration-quality.md
+#   (its frontmatter sets the LLM provider and model, its body is the rubric)
 #   instead of an inline rubric
 # - A reference solution for `skillgrade --validate`
 #
@@ -27,7 +28,7 @@ tasks:
         run: node graders/check-modern-apis.js
         weight: 0.7
 
-      - llm_judge: migration-quality    # the rubric is llm_judges/migration-quality.md
+      - llm_judge: migration-quality    # rubric, provider and model: llm_judges/migration-quality.md
         weight: 0.3
 
     solution: solution/solve.sh

@@ -37,7 +37,7 @@ The agent must modernize an Angular component from legacy APIs to modern ones:
 ## Graders
 
 - **Deterministic (70%)**: a Node.js grader that reads the component source and uses regex-based static analysis to check 5 patterns. Each check contributes 0.2 to the score, enabling partial credit.
-- **LLM Judge (30%)**: `llm_judge: migration-quality` names the file `llm_judges/migration-quality.md`, whose text is the rubric (correctness, completeness, code quality). A Judge keeps the rubric out of the YAML and can be reused by several tasks.
+- **LLM Judge (30%)**: `llm_judge: migration-quality` names the file `llm_judges/migration-quality.md`, whose body is the rubric (correctness, completeness, code quality) and whose frontmatter sets `llm_provider` and `llm_model`. A Judge keeps the rubric and its LLM out of the YAML and can be reused by several tasks, each with its own `weight`.
 
 ```yaml
 graders:
