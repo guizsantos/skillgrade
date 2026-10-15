@@ -111,7 +111,10 @@ export interface ResolvedTask {
     instruction: string;    // actual content (not file path); empty when a Prompt eval's task has none
     /** The folder named after the task under the eval's `workspace/`, if there is one; copied into the agent's workspace. */
     workspaceDir?: string;
-    /** Workspace folders borrowed from other tasks (`workspace: [{task: ...}]`), copied in before `workspaceDir`. */
+    /**
+     * Workspace folders borrowed from other tasks (`workspace: [{task: ...}]`), resolved recursively and
+     * flattened depth-first (each folder once, at its first place), copied in order before `workspaceDir`.
+     */
     borrowedWorkspaceDirs?: string[];
     graders: ResolvedGrader[];
     solution?: string;      // resolved file path
